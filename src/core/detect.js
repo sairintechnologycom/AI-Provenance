@@ -19,6 +19,12 @@ async function getGitOutput(repoPath, args) {
 }
 
 async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
+  // 0. Check for shallow clone
+  const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
+  if (isShallowStr === 'true') {
+    throw new Error('Shallow repository checkout detected. Please set fetch-depth: 0 in your checkout step.');
+  }
+
   let aiTool = null;
   let confidence = 0;
   const methods = [];

@@ -25,6 +25,20 @@ async function run() {
     const confidenceStr = result.aiTool ? `${result.confidence}%` : 'N/A';
     const methodsStr = result.methods && result.methods.length > 0 ? result.methods.join(', ') : 'None';
 
+    const webhookUrl = core.getInput('webhook-url');
+    if (webhookUrl) {
+      try {
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(result)
+        });
+        core.info(`Successfully forwarded telemetry to webhook.`);
+      } catch (postError) {
+        core.warning(`Failed to forward telemetry to webhook: ${postError.message}`);
+      }
+    }
+
     // Use core.summary to generate markdown table
     await core.summary
       .addHeading('AI Provenance Detection')

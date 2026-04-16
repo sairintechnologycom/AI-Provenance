@@ -12,6 +12,7 @@ describe('analyzeCommit', () => {
 
   it('should detect AI tools from git commit trailers', async () => {
     getExecOutput.mockImplementation(async (cmd, args) => {
+      if (args.includes('--is-shallow-repository')) return { exitCode: 0, stdout: "false\n" };
       if (args.includes('--format=%B')) {
         return {
           exitCode: 0,
@@ -42,6 +43,7 @@ describe('analyzeCommit', () => {
 
   it('should fallback to heuristic detection and parse diffs correctly when trailer is missing', async () => {
     getExecOutput.mockImplementation(async (cmd, args) => {
+      if (args.includes('--is-shallow-repository')) return { exitCode: 0, stdout: "false\n" };
       if (args.includes('--format=%B')) {
         return { exitCode: 0, stdout: "Update logic\n" };
       }
@@ -72,6 +74,7 @@ describe('analyzeCommit', () => {
 
   it('should return empty detection if no AI footprint is found', async () => {
     getExecOutput.mockImplementation(async (cmd, args) => {
+      if (args.includes('--is-shallow-repository')) return { exitCode: 0, stdout: "false\n" };
       if (args.includes('--format=%B')) {
         return { exitCode: 0, stdout: "Fix bug\n" };
       }
@@ -98,5 +101,16 @@ describe('analyzeCommit', () => {
       linesRemoved: 1,
       methods: []
     });
+  });
+
+  it('should throw an error if checkout is shallow', async () => {
+    getExecOutput.mockImplementation(async (cmd, args) => {
+      if (args.includes('--is-shallow-repository')) {
+        return { exitCode: 0, stdout: "true\n" };
+      }
+      return { exitCode: 0, stdout: "" };
+    });
+
+    await expect(analyzeCommit('/fake/repo', 'HEAD')).rejects.toThrow('Shallow repository checkout detected. Please set fetch-depth: 0 in your checkout step.');
   });
 });

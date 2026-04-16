@@ -8,6 +8,9 @@ inputs:
   trailer-key:
     description: 'Which git trailer to look for (e.g. Co-authored-by)'
     required: false
+  webhook-url:
+    description: 'URL to forward telemetry JSON output'
+    required: false
 runs:
   using: 'node20'
   main: 'src/action/index.js'
