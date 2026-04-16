@@ -1,0 +1,13 @@
+name: 'AI Provenance Detection'
+description: 'Detect AI-generated code in git commits'
+inputs:
+  sha:
+    description: 'Commit SHA to analyze'
+    required: false
+    default: ${{ github.sha }}
+  trailer-key:
+    description: 'Which git trailer to look for (e.g. Co-authored-by)'
+    required: false
+runs:
+  using: 'node20'
+  main: 'src/action/index.js'
