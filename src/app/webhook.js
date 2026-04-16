@@ -8,9 +8,22 @@ const { fetchCodeOwners, getSuggestedReviewers } = require('../core/codeowners')
 async function handlePullRequest({ octokit, payload }) {
   const { action, repository, pull_request } = payload;
   
-  if (action !== 'opened' && action !== 'synchronize') {
-    return;
-  }
+    // Handle PR closure for Telemetry Ingestion
+    if (action === 'closed') {
+      console.log(`[Webhook] Pull Request #${pull_number} closed (Merged: ${pull_request.merged}). Ingesting telemetry...`);
+      if (pull_request.merged) {
+        await ingestTelemetry(octokit, {
+          owner,
+          repo,
+          pull_request
+        });
+      }
+      return;
+    }
+
+    if (action !== 'opened' && action !== 'synchronize') {
+      return;
+    }
 
   const owner = repository.owner.login;
   const repo = repository.name;
@@ -103,11 +116,198 @@ async function handlePullRequest({ octokit, payload }) {
         });
         console.log(`[Webhook] Posted new comment on PR #${pull_number}`);
       }
+      // 5. Create/Update Status Check (Blocking Merge)
+      await updateStatusCheck(octokit, {
+        owner,
+        repo,
+        sha: pull_request.head.sha,
+        state: 'pending',
+        description: 'Awaiting human review with /merge-brief-approve command.'
+      });
     } else {
       console.log(`[Webhook] No AI provenance detected for PR #${pull_number}`);
+      
+      // Clear status check if previously set (optional, but good practice)
+      await updateStatusCheck(octokit, {
+        owner,
+        repo,
+        sha: pull_request.head.sha,
+        state: 'success',
+        description: 'No AI provenance detected.'
+      });
+    }
     }
   } catch (error) {
     console.error(`[Webhook] Error processing PR #${pull_number}:`, error.message);
+  }
+}
+
+/**
+ * Handle issue_comment events
+ */
+async function handleIssueComment({ octokit, payload }) {
+  const { action, repository, issue, comment } = payload;
+  
+  if (action !== 'created' || !issue.pull_request) {
+    return;
+  }
+
+  const commentText = comment.body.trim();
+  if (!commentText.startsWith('/merge-brief-approve:')) {
+    return;
+  }
+
+  const owner = repository.owner.login;
+  const repo = repository.name;
+  const username = comment.user.login;
+  const reason = commentText.replace('/merge-brief-approve:', '').trim();
+
+  if (!reason) {
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issue.number,
+      body: `⚠️ **MergeBrief Error:** A reason is required for approval. \nExample: \`/merge-brief-approve: This code looks solid and has unit tests.\``
+    });
+    return;
+  }
+
+  try {
+    // 1. Check permissions
+    const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
+      owner,
+      repo,
+      username
+    });
+
+    const isAuthorized = ['admin', 'write'].includes(permission.permission);
+    if (!isAuthorized) {
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: issue.number,
+        body: `❌ **MergeBrief Denied:** You (@${username}) don't have write access to this repo.`
+      });
+      return;
+    }
+
+    // 2. Get PR SHA
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: issue.number
+    });
+
+    // 3. Pass Status Check
+    await updateStatusCheck(octokit, {
+      owner,
+      repo,
+      sha: pr.head.sha,
+      state: 'success',
+      description: `Approved by @${username}: ${reason}`
+    });
+
+    // 4. Acknowledge with confirmation comment
+    await octokit.rest.issues.createComment({
+      owner,
+      repo,
+      issue_number: issue.number,
+      body: `✅ **AI Provenance Approved** by @${username}. The gate is open.\n\n> **Note:** ${reason}`
+    });
+
+  } catch (error) {
+    console.error(`[Webhook] Error handling approval command:`, error.message);
+  }
+}
+
+/**
+ * Ingest final telemetry data into PostgreSQL
+ */
+async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
+  const { prisma } = require('./db');
+  if (!prisma) return;
+
+  try {
+    const orgData = {
+      githubId: String(pull_request.base.repo.owner.id),
+      login: owner
+    };
+
+    const repoData = {
+      githubId: String(pull_request.base.repo.id),
+      owner,
+      name: repo
+    };
+
+    const prNumber = pull_request.number;
+
+    // Build the Organization & Repository
+    const dbOrg = await prisma.organization.upsert({
+      where: { githubId: orgData.githubId },
+      update: { login: orgData.login },
+      create: orgData
+    });
+
+    const dbRepo = await prisma.repository.upsert({
+      where: { githubId: repoData.githubId },
+      update: { owner: repoData.owner, name: repoData.name },
+      create: { ...repoData, organizationId: dbOrg.id }
+    });
+
+    // We can't easily re-run the full analysis on 'closed' without rediffing,
+    // so we'll look for a previous bot comment to extract tool/confidence if possible.
+    const { data: comments } = await octokit.rest.issues.listComments({
+      owner,
+      repo,
+      issue_number: prNumber
+    });
+
+    const botComment = comments.find(c => 
+      c.user.type === 'Bot' && c.body.includes('MergeBrief AI Provenance Summary')
+    );
+
+    let aiTool = null;
+    let confidence = null;
+
+    if (botComment) {
+      // Basic regex extraction from the summary table
+      const toolMatch = botComment.body.match(/\*\*([^*]+)\*\*/);
+      const confMatch = botComment.body.match(/(\d+)%/);
+      if (toolMatch) aiTool = toolMatch[1];
+      if (confMatch) confidence = parseInt(confMatch[1]);
+    }
+
+    // Capture the approval note (from the last /merge-brief-approve command)
+    const approveComment = comments.reverse().find(c => 
+      c.body.startsWith('/merge-brief-approve:')
+    );
+    const approvalNote = approveComment 
+      ? approveComment.body.replace('/merge-brief-approve:', '').trim() 
+      : null;
+
+    await prisma.pullRequest.upsert({
+      where: { repositoryId_number: { repositoryId: dbRepo.id, number: prNumber } },
+      update: {
+        merged: pull_request.merged,
+        status: approvalNote ? 'APPROVED' : 'PENDING',
+        approvalNote
+      },
+      create: {
+        githubId: String(pull_request.id),
+        number: prNumber,
+        repositoryId: dbRepo.id,
+        aiTool,
+        confidence,
+        status: approvalNote ? 'APPROVED' : 'PENDING',
+        approvalNote,
+        merged: pull_request.merged
+      }
+    });
+
+    console.log(`[Webhook] Successfully ingested telemetry for PR #${prNumber}`);
+
+  } catch (error) {
+    console.error(`[Webhook] Ingestion failed:`, error.message);
   }
 }
 
@@ -154,6 +354,28 @@ function formatSummaryComment(results, semanticResults, suggestedReviewers) {
   return body;
 }
 
+/**
+ * Updates the GitHub Status Check for a specific commit
+ */
+async function updateStatusCheck(octokit, { owner, repo, sha, state, description }) {
+  try {
+    await octokit.rest.repos.createCommitStatus({
+      owner,
+      repo,
+      sha,
+      state, // 'pending', 'success', 'failure', 'error'
+      description: description.substring(0, 140),
+      context: 'MergeBrief Approval',
+      target_url: 'https://github.com/apps/merge-brief'
+    });
+    console.log(`[Webhook] Status check updated to ${state} for ${sha.substring(0, 7)}`);
+  } catch (error) {
+    console.error(`[Webhook] Failed to update Status Check:`, error.message);
+  }
+}
+
 module.exports = {
-  handlePullRequest
+  handlePullRequest,
+  handleIssueComment,
+  updateStatusCheck
 };

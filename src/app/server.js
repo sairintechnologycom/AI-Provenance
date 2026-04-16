@@ -3,7 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const { App } = require('@octokit/app');
-const { handlePullRequest } = require('./webhook');
+const { handlePullRequest, handleIssueComment } = require('./webhook');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -72,6 +72,10 @@ app.post('/webhook', async (req, res) => {
 // Event Subscriptions
 githubApp.webhooks.on('pull_request', async ({ octokit, payload }) => {
   await handlePullRequest({ octokit, payload });
+});
+
+githubApp.webhooks.on('issue_comment', async ({ octokit, payload }) => {
+  await handleIssueComment({ octokit, payload });
 });
 
 githubApp.webhooks.on('error', (error) => {

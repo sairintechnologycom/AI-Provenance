@@ -1,0 +1,65 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Organization {
+  id           String   @id @default(cuid())
+  githubId     String   @unique
+  login        String
+  repositories Repository[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Repository {
+  id           String       @id @default(cuid())
+  githubId     String       @unique
+  owner        String
+  name         String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  pullRequests PullRequest[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([owner, name])
+}
+
+model PullRequest {
+  id           String       @id @default(cuid())
+  githubId     String       @unique
+  number       Int
+  repository   Repository   @relation(fields: [repositoryId], references: [id])
+  repositoryId String
+  
+  // AI Provenance Data
+  aiTool       String?
+  confidence   Int?
+  blastRadius  String?      // Stored as a comma-separated string or JSON
+  intent       String?      // Semantic intent
+  
+  // Review Status
+  status       String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvalNote String?
+  merged       Boolean      @default(false)
+  
+  reviewEvents ReviewEvent[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([repositoryId, number])
+}
+
+model ReviewEvent {
+  id            String      @id @default(cuid())
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
+  pullRequestId String
+  eventType     String      // APPROVAL, REJECTION, COMMENT
+  username      String      // GitHub username
+  note          String
+  createdAt     DateTime    @default(now())
+}
