@@ -9,7 +9,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Verify required environment variables
-const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET'];
+const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'ANTHROPIC_API_KEY'];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {

@@ -1,4 +1,6 @@
 const { analyzeCommitData } = require('../core/detect');
+const { analyzeDiffIntent } = require('../core/llm');
+const { fetchCodeOwners, getSuggestedReviewers } = require('../core/codeowners');
 
 /**
  * Handle pull_request events
@@ -53,8 +55,26 @@ async function handlePullRequest({ octokit, payload }) {
     }
 
     if (analysisResults.length > 0) {
-      // 3. Post summary comment
-      const commentBody = formatSummaryComment(analysisResults);
+      // 3. Semantic & Risk Analysis (New Phase 6 Feature)
+      console.log(`[Webhook] AI detected in PR #${pull_number}, performing semantic analysis...`);
+      
+      const { data: fullDiff } = await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number,
+        mediaType: { format: 'diff' }
+      });
+
+      const semanticAnalysis = await analyzeDiffIntent(fullDiff, analysisResults);
+      const codeownersRef = await fetchCodeOwners(octokit, owner, repo);
+      
+      let suggestedReviewers = [];
+      if (semanticAnalysis && semanticAnalysis.highRiskFiles) {
+        suggestedReviewers = getSuggestedReviewers(semanticAnalysis.highRiskFiles, codeownersRef);
+      }
+
+      // 4. Post enhanced summary comment
+      const commentBody = formatSummaryComment(analysisResults, semanticAnalysis, suggestedReviewers);
       
       const { data: comments } = await octokit.rest.issues.listComments({
         owner,
@@ -92,17 +112,42 @@ async function handlePullRequest({ octokit, payload }) {
 }
 
 /**
- * Formats the analysis results into a friendly Markdown table
+ * Formats the analysis results into an enhanced Markdown summary
  */
-function formatSummaryComment(results) {
+function formatSummaryComment(results, semanticResults, suggestedReviewers) {
   let body = '### MergeBrief AI Provenance Summary\n\n';
   body += 'I detected AI-generated code in this Pull Request. Here is the breakdown:\n\n';
+  
+  // 1. Metrics Table
   body += '| Commit | AI Tool | Confidence | Files | Added | Removed |\n';
   body += '| :--- | :--- | :--- | :--- | :--- | :--- |\n';
 
   for (const r of results) {
     const shortSha = r.sha.substring(0, 7);
     body += `| \`${shortSha}\` | **${r.aiTool}** | ${r.confidence}% | ${r.files} | ${r.linesAdded} | ${r.linesRemoved} |\n`;
+  }
+
+  // 2. Semantic Analysis (Phase 6)
+  if (semanticResults) {
+    if (semanticResults.intents && semanticResults.intents.length > 0) {
+      body += '\n#### 🎯 Semantic Intents\n';
+      semanticResults.intents.forEach(intent => {
+        body += `- ${intent}\n`;
+      });
+    }
+
+    if (semanticResults.blastRadius && semanticResults.blastRadius.length > 0) {
+      body += '\n#### ⚠️ Risk Areas (Blast Radius)\n';
+      body += `> **Caution:** These areas are touched by AI-generated code:\n`;
+      body += `> ${semanticResults.blastRadius.join(', ')}\n`;
+    }
+  }
+
+  // 3. Suggested Reviewers
+  if (suggestedReviewers && suggestedReviewers.length > 0) {
+    body += '\n#### 👤 Suggested Reviewers\n';
+    body += `Based on \`CODEOWNERS\` and the risk profile, I suggest the following reviewers:\n`;
+    body += suggestedReviewers.join(' ') + '\n';
   }
 
   body += '\n---\n*This summary was generated automatically by the **MergeBrief** GitHub App. [Learn more](https://github.com/apps/merge-brief)*';
