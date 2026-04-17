@@ -1,142 +1,101 @@
 const { analyzeCommitData } = require('../core/detect');
 const { analyzeDiffIntent } = require('../core/llm');
 const { fetchCodeOwners, getSuggestedReviewers } = require('../core/codeowners');
+const { createCheckRun } = require('../core/checks');
+const { queueJob } = require('./queue');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 /**
  * Handle pull_request events
  */
 async function handlePullRequest({ octokit, payload }) {
   const { action, repository, pull_request } = payload;
-  
-    // Handle PR closure for Telemetry Ingestion
-    if (action === 'closed') {
-      console.log(`[Webhook] Pull Request #${pull_number} closed (Merged: ${pull_request.merged}). Ingesting telemetry...`);
-      if (pull_request.merged) {
-        await ingestTelemetry(octokit, {
-          owner,
-          repo,
-          pull_request
-        });
-      }
-      return;
-    }
-
-    if (action !== 'opened' && action !== 'synchronize') {
-      return;
-    }
-
   const owner = repository.owner.login;
   const repo = repository.name;
   const pull_number = pull_request.number;
 
+  // Handle PR closure for Telemetry Ingestion
+  if (action === 'closed') {
+    console.log(`[Webhook] Pull Request #${pull_number} closed (Merged: ${pull_request.merged}). Ingesting telemetry...`);
+    if (pull_request.merged) {
+      await ingestTelemetry(octokit, {
+        owner,
+        repo,
+        pull_request
+      });
+    }
+    return;
+  }
+
+  if (action !== 'opened' && action !== 'synchronize') {
+    return;
+  }
+
   console.log(`[Webhook] Processing PR #${pull_number} for ${owner}/${repo} (Action: ${action})`);
 
   try {
-    // 1. Get PR commits
-    const { data: commits } = await octokit.rest.pulls.listCommits({
-      owner,
-      repo,
-      pull_number
+    // Scaffold DB structs
+    const orgData = { githubId: String(repository.owner.id), login: owner };
+    const repoData = { githubId: String(repository.id), owner, name: repo };
+
+    const dbOrg = await prisma.organization.upsert({
+      where: { githubId: orgData.githubId },
+      update: { login: orgData.login },
+      create: orgData
     });
 
-    const analysisResults = [];
+    const dbRepo = await prisma.repository.upsert({
+      where: { githubId: repoData.githubId },
+      update: { owner: repoData.owner, name: repoData.name },
+      create: { ...repoData, organizationId: dbOrg.id }
+    });
 
-    for (const commit of commits) {
-      // 2. Get detailed commit info (to get the diff/patch)
-      const { data: commitDetail } = await octokit.rest.repos.getCommit({
-        owner,
-        repo,
-        ref: commit.sha
-      });
-
-      // Combine patches for heuristic detection
-      const fullDiff = commitDetail.files
-        .map(f => f.patch || '')
-        .join('\n');
-
-      const result = analyzeCommitData({
-        sha: commit.sha,
-        message: commitDetail.commit.message,
-        diff: fullDiff,
-        files: commitDetail.files,
-        trailerKey: process.env.TRAILER_KEY || 'AI-generated-by'
-      });
-
-      if (result.aiTool) {
-        analysisResults.push(result);
+    const prRecord = await prisma.pullRequest.upsert({
+      where: { repositoryId_number: { repositoryId: dbRepo.id, number: pull_number } },
+      update: { merged: pull_request.merged, status: 'PENDING' },
+      create: {
+        githubId: String(pull_request.id),
+        number: pull_number,
+        repositoryId: dbRepo.id,
+        status: 'PENDING',
+        merged: pull_request.merged
       }
+    });
+
+    // Create a new Packet record as QUEUED. Since the PR is a 1:1 relation to Packet in this model (or we delete the old one first)
+    // Actually, packet is unique per pullRequestId via the `@unique` constraint. We will delete the old one if it exists.
+    await prisma.mergeBriefPacket.deleteMany({
+      where: { pullRequestId: prRecord.id }
+    });
+    
+    const dbPacket = await prisma.mergeBriefPacket.create({
+      data: {
+        pullRequestId: prRecord.id,
+        status: 'QUEUED',
+        version: 1
+      }
+    });
+
+    // Fire CheckRun directly via Checks API
+    const checkRun = await createCheckRun(octokit, {
+      owner,
+      repo,
+      sha: pull_request.head.sha
+    });
+
+    if (checkRun) {
+      // Fire async to the queue to not timeout the webhook
+      queueJob({
+        octokit,
+        payload,
+        repoRecord: dbRepo,
+        prRecord,
+        checkRunId: checkRun.id,
+        packetId: dbPacket.id
+      });
     }
 
-    if (analysisResults.length > 0) {
-      // 3. Semantic & Risk Analysis (New Phase 6 Feature)
-      console.log(`[Webhook] AI detected in PR #${pull_number}, performing semantic analysis...`);
-      
-      const { data: fullDiff } = await octokit.rest.pulls.get({
-        owner,
-        repo,
-        pull_number,
-        mediaType: { format: 'diff' }
-      });
-
-      const semanticAnalysis = await analyzeDiffIntent(fullDiff, analysisResults);
-      const codeownersRef = await fetchCodeOwners(octokit, owner, repo);
-      
-      let suggestedReviewers = [];
-      if (semanticAnalysis && semanticAnalysis.highRiskFiles) {
-        suggestedReviewers = getSuggestedReviewers(semanticAnalysis.highRiskFiles, codeownersRef);
-      }
-
-      // 4. Post enhanced summary comment
-      const commentBody = formatSummaryComment(analysisResults, semanticAnalysis, suggestedReviewers);
-      
-      const { data: comments } = await octokit.rest.issues.listComments({
-        owner,
-        repo,
-        issue_number: pull_number
-      });
-
-      const botComment = comments.find(c => 
-        c.user.type === 'Bot' && c.body.includes('MergeBrief AI Provenance Summary')
-      );
-
-      if (botComment) {
-        await octokit.rest.issues.updateComment({
-          owner,
-          repo,
-          comment_id: botComment.id,
-          body: commentBody
-        });
-        console.log(`[Webhook] Updated existing comment on PR #${pull_number}`);
-      } else {
-        await octokit.rest.issues.createComment({
-          owner,
-          repo,
-          issue_number: pull_number,
-          body: commentBody
-        });
-        console.log(`[Webhook] Posted new comment on PR #${pull_number}`);
-      }
-      // 5. Create/Update Status Check (Blocking Merge)
-      await updateStatusCheck(octokit, {
-        owner,
-        repo,
-        sha: pull_request.head.sha,
-        state: 'pending',
-        description: 'Awaiting human review with /merge-brief-approve command.'
-      });
-    } else {
-      console.log(`[Webhook] No AI provenance detected for PR #${pull_number}`);
-      
-      // Clear status check if previously set (optional, but good practice)
-      await updateStatusCheck(octokit, {
-        owner,
-        repo,
-        sha: pull_request.head.sha,
-        state: 'success',
-        description: 'No AI provenance detected.'
-      });
-    }
-    }
   } catch (error) {
     console.error(`[Webhook] Error processing PR #${pull_number}:`, error.message);
   }

@@ -37,15 +37,16 @@ Use the included script in your pipeline:
 ```
 
 ### 3. MergeBrief (SaaS / GitHub App)
-The full experience with blocking status checks and LLM-powered "Blast Radius" analysis.
+The full experience with blocking checks, LLM-powered "Blast Radius" analysis, and a unified Web Dashboard.
 
-- **Installation**: `npm install && npx prisma migrate dev`
-- **Server**: `node src/app/server.js`
+- **Installation**: `npm install && npx prisma migrate dev && cd web && npm install`
+- **Server**: `npm run dev:all`
 - **Config**: See `.env.example` (Requires `APP_ID`, `PRIVATE_KEY`, `DATABASE_URL`, `ANTHROPIC_API_KEY`).
 
 #### Features:
-- **Blocking Gates**: Automatically sets a "MergeBrief Approval" status check on PRs with AI code.
-- **Approvals**: Reviewers must comment `/merge-brief-approve: [rationale]` to unlock the merge.
+- **GitHub Check Runs**: Automatically creates a "MergeBrief Analysis" check for rich PR overlays instead of noisy comments.
+- **MergeBrief Packets Dashboard**: View detailed AI authorship packets on our Next.js dashboard separated by deterministic and inferred tags.
+- **Async Processing Engine**: Handles massive PR diffs natively through a background queue constraint to not timeout webhooks.
 - **Semantic Intent**: AI-driven analysis of *why* the code was changed (e.g., "Refactoring Auth Logic").
 
 ---

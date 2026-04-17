@@ -48,10 +48,12 @@ npx prisma migrate dev --name init
 ## 2. Running the Service
 
 ### Development
+For Phase 1 local development, you need both the Node/Express webhook backend and the Next.js UI running simultaneously.
 ```bash
-node src/app/server.js
+npm run dev:all
 ```
-The server will start on port `3000` (by default) and listen for GitHub webhooks at `/webhook`.
+The Express backend will start on port `3000` and listen for GitHub webhooks at `/webhook`.
+The Next.js React frontend will start on port `3001` and is accessible at `http://localhost:3001`.
 
 ### Production (Docker)
 We include a `Dockerfile` and `docker-compose.yml` for containerized deployment:
@@ -68,10 +70,11 @@ docker-compose up -d
 2. **Permissions**:
    - `Pull Requests`: Read & Write (for comments and diffs).
    - `Issue Comments`: Read & Write (for commands).
-   - `Commit Statuses`: Read & Write (for blocking gates).
+   - `Checks`: Read & Write (Required for MergeBrief Packets Check Runs).
 3. **Events**:
    - `Pull request`
    - `Issue comment`
+   - `Check run`
 
 ---
 

@@ -44,6 +44,10 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// APIs
+const apiRouter = require('./api');
+app.use('/api', apiRouter);
+
 // Main Webhook endpoint
 app.post('/webhook', async (req, res) => {
   try {

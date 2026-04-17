@@ -5,7 +5,10 @@
   "main": "src/core/detect.js",
   "type": "commonjs",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "dev:backend": "node src/app/server.js",
+    "dev:web": "cd web && npm run dev",
+    "dev:all": "npx concurrently \"npm run dev:backend\" \"npm run dev:web\""
   },
   "author": "",
   "license": "ISC",

@@ -1,0 +1,32 @@
+{
+  "organizations": [
+    {
+      "githubId": "123",
+      "login": "test-org",
+      "id": "org-1776393048742"
+    }
+  ],
+  "repositories": [
+    {
+      "githubId": "456",
+      "owner": "test-org",
+      "name": "test-repo",
+      "organizationId": "org-1776393048742",
+      "id": "repo-1776393048742"
+    }
+  ],
+  "pullRequests": [
+    {
+      "githubId": "789",
+      "number": 1,
+      "repositoryId": "repo-1776393048742",
+      "aiTool": "Copilot",
+      "confidence": 100,
+      "status": "PENDING",
+      "approvalNote": null,
+      "merged": true,
+      "id": "pr-1776393048742"
+    }
+  ],
+  "reviewEvents": []
+}

@@ -7,49 +7,46 @@ generator client {
 }
 
 model Organization {
-  id           String   @id @default(cuid())
-  githubId     String   @unique
+  id           String       @id @default(cuid())
+  githubId     String       @unique
   login        String
   repositories Repository[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 }
 
 model Repository {
-  id           String       @id @default(cuid())
-  githubId     String       @unique
-  owner        String
-  name         String
-  organization Organization @relation(fields: [organizationId], references: [id])
+  id             String        @id @default(cuid())
+  githubId       String        @unique
+  owner          String
+  name           String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
   organizationId String
-  pullRequests PullRequest[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  pullRequests   PullRequest[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@unique([owner, name])
 }
 
 model PullRequest {
-  id           String       @id @default(cuid())
-  githubId     String       @unique
+  id           String     @id @default(cuid())
+  githubId     String     @unique
   number       Int
-  repository   Repository   @relation(fields: [repositoryId], references: [id])
+  repository   Repository @relation(fields: [repositoryId], references: [id])
   repositoryId String
-  
-  // AI Provenance Data
-  aiTool       String?
-  confidence   Int?
-  blastRadius  String?      // Stored as a comma-separated string or JSON
-  intent       String?      // Semantic intent
-  
+
   // Review Status
-  status       String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  status       String  @default("PENDING") // PENDING, APPROVED, REJECTED
   approvalNote String?
-  merged       Boolean      @default(false)
-  
+  merged       Boolean @default(false)
+
   reviewEvents ReviewEvent[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  packet       MergeBriefPacket?
+  analysisJobs AnalysisJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([repositoryId, number])
 }
@@ -58,8 +55,85 @@ model ReviewEvent {
   id            String      @id @default(cuid())
   pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
   pullRequestId String
-  eventType     String      // APPROVAL, REJECTION, COMMENT
-  username      String      // GitHub username
+  eventType     String // APPROVAL, REJECTION, COMMENT
+  username      String // GitHub username
   note          String
   createdAt     DateTime    @default(now())
+}
+
+model MergeBriefPacket {
+  id            String      @id @default(cuid())
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
+  pullRequestId String      @unique
+
+  status  String @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
+  version Int    @default(1)
+
+  headSha String?
+  baseSha String?
+
+  // Overarching stats
+  summary           String?
+  aiTool            String?
+  confidence        Int?
+  filesChangedCount Int?
+
+  rawPayload String? // JSON context
+
+  tags                PacketRiskTag[]
+  intents             PacketIntent[]
+  reviewerSuggestions PacketReviewerSuggestion[]
+  provenanceEvidence  PacketProvenanceEvidence[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PacketRiskTag {
+  id       String           @id @default(cuid())
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+  packetId String
+
+  type     String // "DETERMINISTIC" or "INFERRED"
+  category String // e.g. "auth", "infra"
+  reason   String?
+}
+
+model PacketIntent {
+  id       String           @id @default(cuid())
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+  packetId String
+
+  detail String // E.g. "Refactoring auth module"
+}
+
+model PacketReviewerSuggestion {
+  id       String           @id @default(cuid())
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+  packetId String
+
+  username String
+  reason   String? // Based on which files or CODEOWNERS rules
+}
+
+model PacketProvenanceEvidence {
+  id       String           @id @default(cuid())
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+  packetId String
+
+  file       String?
+  method     String // e.g., "trailer", "heuristic"
+  confidence Int?
+}
+
+model AnalysisJob {
+  id            String      @id @default(cuid())
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
+  pullRequestId String
+
+  status      String  @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
+  errorDetail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
