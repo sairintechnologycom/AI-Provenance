@@ -3,7 +3,7 @@
  * Evaluates touched files against known patterns to flag specific risk categories.
  */
 
-const RISK_RULES = [
+export const RISK_RULES = [
   {
     category: 'auth',
     pattern: /(auth(entication|orization)?|login|passport|jwt|session|cookie|token|oauth|mfa|saml|sso)/i,
@@ -46,7 +46,7 @@ const RISK_RULES = [
  * @param {string[]} filePaths - Array of touched file paths.
  * @returns {Array<{category: string, reason: string}>} Array of unique tags.
  */
-function evaluateDeterministicRisks(filePaths) {
+export function evaluateDeterministicRisks(filePaths) {
   const matchedTags = new Map();
 
   for (const filePath of filePaths) {
@@ -79,8 +79,3 @@ function evaluateDeterministicRisks(filePaths) {
 
   return results;
 }
-
-module.exports = {
-  evaluateDeterministicRisks,
-  RISK_RULES
-};

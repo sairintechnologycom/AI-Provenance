@@ -1,12 +1,10 @@
-const fetch = require('node-fetch');
-
 /**
  * Sends a notification to Slack via Webhook.
  * @param {string} webhookUrl - Incoming webhook URL.
  * @param {object} packet - The MergeBriefPacket object.
  * @param {object} pr - The PullRequest and Repository context.
  */
-async function sendSlackNotification(webhookUrl, packet, pr) {
+export async function sendSlackNotification(webhookUrl, packet, pr) {
   if (!webhookUrl) return;
 
   const repoPath = `${pr.repository.owner}/${pr.repository.name}`;
@@ -86,5 +84,3 @@ async function sendSlackNotification(webhookUrl, packet, pr) {
     console.error(`[Slack Error] Failed to send notification for packet ${packet.id}:`, error.message);
   }
 }
-
-module.exports = { sendSlackNotification };

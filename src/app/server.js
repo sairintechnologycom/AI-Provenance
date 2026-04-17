@@ -1,9 +1,10 @@
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const morgan = require('morgan');
-const { App } = require('@octokit/app');
-const { handlePullRequest, handleIssueComment } = require('./webhook');
+import 'dotenv/config';
+import express from 'express';
+import bodyParser from 'body-parser';
+import morgan from 'morgan';
+import { App } from '@octokit/app';
+import { handlePullRequest, handleIssueComment } from './webhook.js';
+import apiRouter from './api.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -14,17 +15,34 @@ const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {
   console.error(`FATAL: Missing environment variables: ${missingEnv.join(', ')}`);
-  process.exit(1);
+  // Not exiting here to allow for inspection, but server won't function for GitHub webhooks
+  console.warn('Server will start, but GitHub Webhook features will crash without these variables.');
 }
 
 // Initialize GitHub App
-const githubApp = new App({
-  appId: process.env.APP_ID,
-  privateKey: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
-  webhooks: {
-    secret: process.env.WEBHOOK_SECRET
-  }
-});
+let githubApp;
+if (process.env.APP_ID && process.env.PRIVATE_KEY) {
+  githubApp = new App({
+    appId: process.env.APP_ID,
+    privateKey: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
+    webhooks: {
+      secret: process.env.WEBHOOK_SECRET
+    }
+  });
+
+  // Event Subscriptions
+  githubApp.webhooks.on('pull_request', async ({ octokit, payload }) => {
+    await handlePullRequest({ octokit, payload });
+  });
+
+  githubApp.webhooks.on('issue_comment', async ({ octokit, payload }) => {
+    await handleIssueComment({ octokit, payload });
+  });
+
+  githubApp.webhooks.on('error', (error) => {
+    console.error(`[Webhook Error] ${error.message}`);
+  });
+}
 
 // Middleware
 app.use(morgan('dev'));
@@ -45,11 +63,14 @@ app.get('/health', (req, res) => {
 });
 
 // APIs
-const apiRouter = require('./api');
 app.use('/api', apiRouter);
 
 // Main Webhook endpoint
 app.post('/webhook', async (req, res) => {
+  if (!githubApp) {
+    return res.status(503).send('GitHub App not configured');
+  }
+
   try {
     const id = req.headers['x-github-delivery'];
     const name = req.headers['x-github-event'];
@@ -71,19 +92,6 @@ app.post('/webhook', async (req, res) => {
     console.error(`[Webhook Error] ${error.message}`);
     res.status(401).send('Unauthorized');
   }
-});
-
-// Event Subscriptions
-githubApp.webhooks.on('pull_request', async ({ octokit, payload }) => {
-  await handlePullRequest({ octokit, payload });
-});
-
-githubApp.webhooks.on('issue_comment', async ({ octokit, payload }) => {
-  await handleIssueComment({ octokit, payload });
-});
-
-githubApp.webhooks.on('error', (error) => {
-  console.error(`[Webhook Error] ${error.message}`);
 });
 
 // Start Server

@@ -1,9 +1,9 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
+import { Anthropic } from '@anthropic-ai/sdk';
 
 /**
  * Analyzes a git diff using Claude to determine semantic intent and risk areas.
  */
-async function analyzeDiffIntent(diff, provenanceSummary) {
+export async function analyzeDiffIntent(diff, provenanceSummary) {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn('[LLM] ANTHROPIC_API_KEY not found, skipping semantic analysis.');
     return null;
@@ -55,7 +55,3 @@ ${diff.substring(0, 30000)} // Truncate if too long
     return null;
   }
 }
-
-module.exports = {
-  analyzeDiffIntent
-};

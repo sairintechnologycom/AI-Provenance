@@ -1,9 +1,9 @@
 {
   "name": "ai-provenance-core",
   "version": "1.0.0",
+  "type": "module",
   "description": "Core detection engine for AI Provenance",
   "main": "src/core/detect.js",
-  "type": "commonjs",
   "scripts": {
     "test": "jest",
     "dev:backend": "node src/app/server.js",
@@ -20,7 +20,7 @@
     "@octokit/app": "^15.1.0",
     "@octokit/auth-app": "^7.1.0",
     "@octokit/webhooks": "^13.3.0",
-    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/adapter-pg": "^6.2.1",
     "body-parser": "^1.20.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -30,10 +30,10 @@
     "pg": "^8.20.0"
   },
   "devDependencies": {
-    "@prisma/client": "^7.7.0",
+    "@prisma/client": "^6.2.1",
     "@types/pg": "^8.20.0",
     "jest": "^30.3.0",
-    "prisma": "^7.7.0"
+    "prisma": "^6.2.1"
   },
   "prisma": {
     "seed": "node scripts/demo-seed.js"

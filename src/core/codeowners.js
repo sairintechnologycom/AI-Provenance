@@ -1,9 +1,9 @@
-const { minimatch } = require('minimatch');
+import { minimatch } from 'minimatch';
 
 /**
  * Fetches the CODEOWNERS file from several standard locations.
  */
-async function fetchCodeOwners(octokit, owner, repo) {
+export async function fetchCodeOwners(octokit, owner, repo) {
   const possiblePaths = ['.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS'];
   
   for (const path of possiblePaths) {
@@ -48,7 +48,7 @@ function parseCodeOwners(content) {
 /**
  * Suggests reviewers based on high-risk files identified by LLM and CODEOWNERS rules.
  */
-function getSuggestedReviewers(highRiskFiles, codeownersContent) {
+export function getSuggestedReviewers(highRiskFiles, codeownersContent) {
   if (!codeownersContent || !highRiskFiles || highRiskFiles.length === 0) {
     return [];
   }
@@ -95,8 +95,3 @@ function getSuggestedReviewers(highRiskFiles, codeownersContent) {
 
   return Array.from(suggestedReviewers);
 }
-
-module.exports = {
-  fetchCodeOwners,
-  getSuggestedReviewers
-};

@@ -3,17 +3,15 @@
  * Lightweight in-memory implementation for Phase 1.
  */
 
-const { analyzeCommitData } = require('../core/detect');
-const { analyzeDiffIntent } = require('../core/llm');
-const { fetchCodeOwners, getSuggestedReviewers } = require('../core/codeowners');
-const { evaluateDeterministicRisks } = require('../core/risk-engine');
-const { buildPacket } = require('../core/packet-builder');
-const { updateCheckRun } = require('../core/checks');
-const { PrismaClient } = require('@prisma/client');
-const { sendSlackNotification } = require('./slack');
-const { logAppEvent } = require('./analytics');
-
-const prisma = new PrismaClient();
+import { analyzeCommitData } from '../core/detect.js';
+import { analyzeDiffIntent } from '../core/llm.js';
+import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
+import { evaluateDeterministicRisks } from '../core/risk-engine.js';
+import { buildPacket } from '../core/packet-builder.js';
+import { updateCheckRun } from '../core/checks.js';
+import { prisma } from './db.js';
+import { sendSlackNotification } from './slack.js';
+import { logAppEvent } from './analytics.js';
 
 const queue = [];
 let isProcessing = false;
@@ -21,7 +19,7 @@ let isProcessing = false;
 /**
  * Queues a PR for analysis
  */
-function queueJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId }) {
+export function queueJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId }) {
   queue.push({
     octokit, payload, repoRecord, prRecord, checkRunId, packetId, addedAt: Date.now()
   });
@@ -59,10 +57,12 @@ async function processNext() {
         }
       });
       
-      await prisma.mergeBriefPacket.update({
-        where: { id: jobParams.packetId },
-        data: { status: 'FAILED' }
-      });
+      if (prisma) {
+        await prisma.mergeBriefPacket.update({
+          where: { id: jobParams.packetId },
+          data: { status: 'FAILED' }
+        });
+      }
     } catch (e) {
       console.error('[AsyncQueue] Could not report failure state:', e);
     }
@@ -93,10 +93,12 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     status: 'in_progress'
   });
 
-  await prisma.mergeBriefPacket.update({
-    where: { id: packetId },
-    data: { status: 'PROCESSING' }
-  });
+  if (prisma) {
+    await prisma.mergeBriefPacket.update({
+      where: { id: packetId },
+      data: { status: 'PROCESSING' }
+    });
+  }
 
   // 2. Fetch Commits
   const { data: commits } = await octokit.rest.pulls.listCommits({
@@ -140,20 +142,17 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   const MAX_DIFF_LINES = 1000;
   let didDiffExceedLimit = false;
 
-  // We only consult LLM if there's AI authorship or to figure out intents
-  // Pulling full PR diff
   const { data: fullPrDiff } = await octokit.rest.pulls.get({
     owner, repo, pull_number, mediaType: { format: 'diff' }
   });
 
-  const linesCount = fullPrDiff.split('\\n').length;
+  const linesCount = fullPrDiff.split('\n').length;
   if (linesCount > MAX_DIFF_LINES) {
     didDiffExceedLimit = true;
     console.log(`[AsyncQueue] Diff is very large (${linesCount} lines). Analyzing partial chunk.`);
   }
 
-  // Take the first chunk for LLM analysis
-  const diffChunk = fullPrDiff.split('\\n').slice(0, MAX_DIFF_LINES).join('\\n');
+  const diffChunk = fullPrDiff.split('\n').slice(0, MAX_DIFF_LINES).join('\n');
   
   if (analysisResults.length > 0 || totalAdditions > 0) {
      semanticAnalysis = await analyzeDiffIntent(diffChunk, analysisResults);
@@ -168,7 +167,6 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   if (semanticAnalysis && semanticAnalysis.highRiskFiles) {
     suggestedReviewers = getSuggestedReviewers(semanticAnalysis.highRiskFiles, codeownersRef);
   } else {
-    // default suggestions on all files if semantic analysis fails or is not risky
     suggestedReviewers = getSuggestedReviewers(allTouchedFiles, codeownersRef);
   }
 
@@ -181,54 +179,54 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     deterministicTags
   });
 
-  // Optional: append partial analysis warning if diff was too large
   if (didDiffExceedLimit && builtPacket.summary) {
-     builtPacket.summary += '\\n\\n*(Note: Pull request was exceptionally large; LLM summary is based on a partial sample.)*';
+     builtPacket.summary += '\n\n*(Note: Pull request was exceptionally large; LLM summary is based on a partial sample.)*';
   }
 
   // 7. Persist to DB
-  await prisma.mergeBriefPacket.update({
-    where: { id: packetId },
-    data: {
-      status: 'COMPLETED',
-      summary: builtPacket.summary,
-      aiTool: builtPacket.aiTool,
-      confidence: builtPacket.confidence,
-      filesChangedCount: builtPacket.filesChangedCount,
-      headSha: pull_request.head.sha,
-      baseSha: pull_request.base.sha,
-      rawPayload: builtPacket.rawPayload,
-      
-      tags: { create: builtPacket.tags },
-      intents: { create: builtPacket.intents },
-      reviewerSuggestions: { create: builtPacket.reviewerSuggestions },
-      provenanceEvidence: { create: builtPacket.provenanceEvidence }
-    }
-  });
+  if (prisma) {
+    await prisma.mergeBriefPacket.update({
+      where: { id: packetId },
+      data: {
+        status: 'COMPLETED',
+        summary: builtPacket.summary,
+        aiTool: builtPacket.aiTool,
+        confidence: builtPacket.confidence,
+        filesChangedCount: builtPacket.filesChangedCount,
+        headSha: pull_request.head.sha,
+        baseSha: pull_request.base.sha,
+        rawPayload: builtPacket.rawPayload,
+        
+        tags: { create: builtPacket.tags },
+        intents: { create: builtPacket.intents },
+        reviewerSuggestions: { create: builtPacket.reviewerSuggestions },
+        provenanceEvidence: { create: builtPacket.provenanceEvidence }
+      }
+    });
 
-  // Update PR record backward compatibility metrics
-  await prisma.pullRequest.update({
-    where: { id: prRecord.id },
-    data: {
-      aiTool: builtPacket.aiTool,
-      confidence: builtPacket.confidence
-    }
-  });
+    await prisma.pullRequest.update({
+      where: { id: prRecord.id },
+      data: {
+        aiTool: builtPacket.aiTool,
+        confidence: builtPacket.confidence
+      }
+    });
+  }
 
   // 8. Output to GitHub Check
   const appBaseUrl = process.env.BASE_UI_URL || 'http://localhost:3001';
   const packetUrl = `${appBaseUrl}/packets/${packetId}`;
   
-  let checkSummary = `### MergeBrief Packet Generated\\n\\n`;
-  checkSummary += `**Packet Status**: COMPLETED\\n`;
-  checkSummary += `**Confidence**: ${builtPacket.confidence || 0}% AI Evidence\\n`;
-  if (builtPacket.summary) checkSummary += `\\n> ${builtPacket.summary}\\n`;
-  checkSummary += `\\n[🔍 View Full Packet & Risk Details](${packetUrl})`;
+  let checkSummary = `### MergeBrief Packet Generated\n\n`;
+  checkSummary += `**Packet Status**: COMPLETED\n`;
+  checkSummary += `**Confidence**: ${builtPacket.confidence || 0}% AI Evidence\n`;
+  if (builtPacket.summary) checkSummary += `\n> ${builtPacket.summary}\n`;
+  checkSummary += `\n[🔍 View Full Packet & Risk Details](${packetUrl})`;
 
   await updateCheckRun(octokit, {
     owner, repo, check_run_id: checkRunId,
     status: 'completed',
-    conclusion: (builtPacket.confidence && builtPacket.confidence > 50) ? 'neutral' : 'success', // Neutral to prompt review without failing build, unless strict
+    conclusion: (builtPacket.confidence && builtPacket.confidence > 50) ? 'neutral' : 'success',
     output: {
       title: 'MergeBrief Analysis',
       summary: checkSummary
@@ -237,31 +235,33 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   });
 
   // 9. Slack Notification
-  try {
-    const repoWithOrg = await prisma.repository.findUnique({
-      where: { id: repoRecord.id },
-      include: { organization: { include: { workspace: true } } }
-    });
-
-    const workspace = repoWithOrg?.organization?.workspace;
-    const currentPacket = await prisma.mergeBriefPacket.findUnique({
-      where: { id: packetId }
-    });
-
-    if (workspace && workspace.slackWebhookUrl && !currentPacket.slackSentAt) {
-      console.log(`[AsyncQueue] Sending Slack notification for PR #${pull_number}...`);
-      await sendSlackNotification(workspace.slackWebhookUrl, builtPacket, {
-        number: pull_number,
-        repository: { owner, name: repo }
+  if (prisma) {
+    try {
+      const repoWithOrg = await prisma.repository.findUnique({
+        where: { id: repoRecord.id },
+        include: { organization: { include: { workspace: true } } }
       });
 
-      await prisma.mergeBriefPacket.update({
-        where: { id: packetId },
-        data: { slackSentAt: new Date() }
+      const workspace = repoWithOrg?.organization?.workspace;
+      const currentPacket = await prisma.mergeBriefPacket.findUnique({
+        where: { id: packetId }
       });
+
+      if (workspace && workspace.slackWebhookUrl && !currentPacket.slackSentAt) {
+        console.log(`[AsyncQueue] Sending Slack notification for PR #${pull_number}...`);
+        await sendSlackNotification(workspace.slackWebhookUrl, builtPacket, {
+          number: pull_number,
+          repository: { owner, name: repo }
+        });
+
+        await prisma.mergeBriefPacket.update({
+          where: { id: packetId },
+          data: { slackSentAt: new Date() }
+        });
+      }
+    } catch (slackErr) {
+      console.error(`[AsyncQueue] Non-fatal Slack error:`, slackErr.message);
     }
-  } catch (slackErr) {
-    console.error(`[AsyncQueue] Non-fatal Slack error:`, slackErr.message);
   }
 
   await logAppEvent('packet_completed', {
@@ -274,7 +274,4 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   console.log(`[AsyncQueue] PR #${pull_number} completed successfully.`);
 }
 
-module.exports = {
-  queueJob,
-  processQueue: processNext
-};
+export const processQueue = processNext;

@@ -1,15 +1,14 @@
-const { analyzeCommitData } = require('../core/detect');
-const { analyzeDiffIntent } = require('../core/llm');
-const { fetchCodeOwners, getSuggestedReviewers } = require('../core/codeowners');
-const { createCheckRun } = require('../core/checks');
-const { queueJob } = require('./queue');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+import { analyzeCommitData } from '../core/detect.js';
+import { analyzeDiffIntent } from '../core/llm.js';
+import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
+import { createCheckRun } from '../core/checks.js';
+import { queueJob } from './queue.js';
+import { prisma } from './db.js';
 
 /**
  * Handle pull_request events
  */
-async function handlePullRequest({ octokit, payload }) {
+export async function handlePullRequest({ octokit, payload }) {
   const { action, repository, pull_request } = payload;
   const owner = repository.owner.login;
   const repo = repository.name;
@@ -35,47 +34,51 @@ async function handlePullRequest({ octokit, payload }) {
   console.log(`[Webhook] Processing PR #${pull_number} for ${owner}/${repo} (Action: ${action})`);
 
   try {
-    // Scaffold DB structs
-    const orgData = { githubId: String(repository.owner.id), login: owner };
-    const repoData = { githubId: String(repository.id), owner, name: repo };
+    let prRecord = { id: 'temp_' + Date.now(), number: pull_number };
+    let dbRepo = { id: 'temp_repo', owner, name: repo };
+    let dbPacket = { id: 'temp_pkt' };
 
-    const dbOrg = await prisma.organization.upsert({
-      where: { githubId: orgData.githubId },
-      update: { login: orgData.login },
-      create: orgData
-    });
+    if (prisma) {
+      // Scaffold DB structs
+      const orgData = { githubId: String(repository.owner.id), login: owner };
+      const repoData = { githubId: String(repository.id), owner, name: repo };
 
-    const dbRepo = await prisma.repository.upsert({
-      where: { githubId: repoData.githubId },
-      update: { owner: repoData.owner, name: repoData.name },
-      create: { ...repoData, organizationId: dbOrg.id }
-    });
+      const dbOrg = await prisma.organization.upsert({
+        where: { githubId: orgData.githubId },
+        update: { login: orgData.login },
+        create: orgData
+      });
 
-    const prRecord = await prisma.pullRequest.upsert({
-      where: { repositoryId_number: { repositoryId: dbRepo.id, number: pull_number } },
-      update: { merged: pull_request.merged, status: 'PENDING' },
-      create: {
-        githubId: String(pull_request.id),
-        number: pull_number,
-        repositoryId: dbRepo.id,
-        status: 'PENDING',
-        merged: pull_request.merged
-      }
-    });
+      dbRepo = await prisma.repository.upsert({
+        where: { githubId: repoData.githubId },
+        update: { owner: repoData.owner, name: repoData.name },
+        create: { ...repoData, organizationId: dbOrg.id }
+      });
 
-    // Create a new Packet record as QUEUED. Since the PR is a 1:1 relation to Packet in this model (or we delete the old one first)
-    // Actually, packet is unique per pullRequestId via the `@unique` constraint. We will delete the old one if it exists.
-    await prisma.mergeBriefPacket.deleteMany({
-      where: { pullRequestId: prRecord.id }
-    });
-    
-    const dbPacket = await prisma.mergeBriefPacket.create({
-      data: {
-        pullRequestId: prRecord.id,
-        status: 'QUEUED',
-        version: 1
-      }
-    });
+      prRecord = await prisma.pullRequest.upsert({
+        where: { repositoryId_number: { repositoryId: dbRepo.id, number: pull_number } },
+        update: { merged: pull_request.merged, status: 'PENDING' },
+        create: {
+          githubId: String(pull_request.id),
+          number: pull_number,
+          repositoryId: dbRepo.id,
+          status: 'PENDING',
+          merged: pull_request.merged
+        }
+      });
+
+      await prisma.mergeBriefPacket.deleteMany({
+        where: { pullRequestId: prRecord.id }
+      });
+      
+      dbPacket = await prisma.mergeBriefPacket.create({
+        data: {
+          pullRequestId: prRecord.id,
+          status: 'QUEUED',
+          version: 1
+        }
+      });
+    }
 
     // Fire CheckRun directly via Checks API
     const checkRun = await createCheckRun(octokit, {
@@ -104,7 +107,7 @@ async function handlePullRequest({ octokit, payload }) {
 /**
  * Handle issue_comment events
  */
-async function handleIssueComment({ octokit, payload }) {
+export async function handleIssueComment({ octokit, payload }) {
   const { action, repository, issue, comment } = payload;
   
   if (action !== 'created' || !issue.pull_request) {
@@ -183,7 +186,6 @@ async function handleIssueComment({ octokit, payload }) {
  * Ingest final telemetry data into PostgreSQL
  */
 async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
-  const { prisma } = require('./db');
   if (!prisma) return;
 
   try {
@@ -213,8 +215,7 @@ async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
       create: { ...repoData, organizationId: dbOrg.id }
     });
 
-    // We can't easily re-run the full analysis on 'closed' without rediffing,
-    // so we'll look for a previous bot comment to extract tool/confidence if possible.
+    // Fetch comments
     const { data: comments } = await octokit.rest.issues.listComments({
       owner,
       repo,
@@ -229,14 +230,12 @@ async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
     let confidence = null;
 
     if (botComment) {
-      // Basic regex extraction from the summary table
       const toolMatch = botComment.body.match(/\*\*([^*]+)\*\*/);
       const confMatch = botComment.body.match(/(\d+)%/);
       if (toolMatch) aiTool = toolMatch[1];
       if (confMatch) confidence = parseInt(confMatch[1]);
     }
 
-    // Capture the approval note (from the last /merge-brief-approve command)
     const approveComment = comments.reverse().find(c => 
       c.body.startsWith('/merge-brief-approve:')
     );
@@ -271,52 +270,9 @@ async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
 }
 
 /**
- * Formats the analysis results into an enhanced Markdown summary
- */
-function formatSummaryComment(results, semanticResults, suggestedReviewers) {
-  let body = '### MergeBrief AI Provenance Summary\n\n';
-  body += 'I detected AI-generated code in this Pull Request. Here is the breakdown:\n\n';
-  
-  // 1. Metrics Table
-  body += '| Commit | AI Tool | Confidence | Files | Added | Removed |\n';
-  body += '| :--- | :--- | :--- | :--- | :--- | :--- |\n';
-
-  for (const r of results) {
-    const shortSha = r.sha.substring(0, 7);
-    body += `| \`${shortSha}\` | **${r.aiTool}** | ${r.confidence}% | ${r.files} | ${r.linesAdded} | ${r.linesRemoved} |\n`;
-  }
-
-  // 2. Semantic Analysis (Phase 6)
-  if (semanticResults) {
-    if (semanticResults.intents && semanticResults.intents.length > 0) {
-      body += '\n#### 🎯 Semantic Intents\n';
-      semanticResults.intents.forEach(intent => {
-        body += `- ${intent}\n`;
-      });
-    }
-
-    if (semanticResults.blastRadius && semanticResults.blastRadius.length > 0) {
-      body += '\n#### ⚠️ Risk Areas (Blast Radius)\n';
-      body += `> **Caution:** These areas are touched by AI-generated code:\n`;
-      body += `> ${semanticResults.blastRadius.join(', ')}\n`;
-    }
-  }
-
-  // 3. Suggested Reviewers
-  if (suggestedReviewers && suggestedReviewers.length > 0) {
-    body += '\n#### 👤 Suggested Reviewers\n';
-    body += `Based on \`CODEOWNERS\` and the risk profile, I suggest the following reviewers:\n`;
-    body += suggestedReviewers.join(' ') + '\n';
-  }
-
-  body += '\n---\n*This summary was generated automatically by the **MergeBrief** GitHub App. [Learn more](https://github.com/apps/merge-brief)*';
-  return body;
-}
-
-/**
  * Updates the GitHub Status Check for a specific commit
  */
-async function updateStatusCheck(octokit, { owner, repo, sha, state, description }) {
+export async function updateStatusCheck(octokit, { owner, repo, sha, state, description }) {
   try {
     await octokit.rest.repos.createCommitStatus({
       owner,
@@ -332,9 +288,3 @@ async function updateStatusCheck(octokit, { owner, repo, sha, state, description
     console.error(`[Webhook] Failed to update Status Check:`, error.message);
   }
 }
-
-module.exports = {
-  handlePullRequest,
-  handleIssueComment,
-  updateStatusCheck
-};

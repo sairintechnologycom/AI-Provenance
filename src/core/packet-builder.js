@@ -3,7 +3,7 @@
  * Converts AI core detect results and LLM semantic intent analysis into a canonical MergeBrief packet.
  */
 
-function buildPacket({
+export function buildPacket({
   pullRequest,
   diffResults = [],
   semanticAnalysis = null,
@@ -79,7 +79,7 @@ function buildPacket({
 /**
  * Checks if the packet contains useful fields or needs review.
  */
-function assessPacketCompleteness(packet) {
+export function assessPacketCompleteness(packet) {
   return {
     hasProvenance: packet.provenanceEvidence.length > 0,
     hasReviewerSuggestions: packet.reviewerSuggestions.length > 0,
@@ -87,8 +87,3 @@ function assessPacketCompleteness(packet) {
     hasIntentSummary: packet.intents.length > 0
   };
 }
-
-module.exports = {
-  buildPacket,
-  assessPacketCompleteness
-};

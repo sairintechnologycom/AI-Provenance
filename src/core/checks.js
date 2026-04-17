@@ -2,7 +2,7 @@
  * GitHub Check Runs API Integration
  */
 
-async function createCheckRun(octokit, { owner, repo, sha, name = 'MergeBrief AI Analysis' }) {
+export async function createCheckRun(octokit, { owner, repo, sha, name = 'MergeBrief AI Analysis' }) {
   try {
     const response = await octokit.rest.checks.create({
       owner,
@@ -19,7 +19,7 @@ async function createCheckRun(octokit, { owner, repo, sha, name = 'MergeBrief AI
   }
 }
 
-async function updateCheckRun(octokit, { owner, repo, check_run_id, status, conclusion, output, packetUrl = null }) {
+export async function updateCheckRun(octokit, { owner, repo, check_run_id, status, conclusion, output, packetUrl = null }) {
   try {
     const payload = {
       owner,
@@ -53,8 +53,3 @@ async function updateCheckRun(octokit, { owner, repo, check_run_id, status, conc
     return null;
   }
 }
-
-module.exports = {
-  createCheckRun,
-  updateCheckRun
-};

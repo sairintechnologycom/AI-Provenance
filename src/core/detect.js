@@ -1,6 +1,6 @@
-const { getExecOutput } = require('@actions/exec');
+import { getExecOutput } from '@actions/exec';
 
-async function getGitOutput(repoPath, args) {
+export async function getGitOutput(repoPath, args) {
   try {
     const { exitCode, stdout, stderr } = await getExecOutput('git', args, {
       cwd: repoPath,
@@ -18,7 +18,7 @@ async function getGitOutput(repoPath, args) {
   }
 }
 
-async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
+export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
   // 0. Check for shallow clone
   const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
   if (isShallowStr === 'true') {
@@ -49,7 +49,7 @@ async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by'
  * @param {string|Array} data.files - Either numstat string or array of file objects {additions, deletions}
  * @param {string} data.trailerKey
  */
-function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-generated-by' }) {
+export function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-generated-by' }) {
   let aiTool = null;
   let confidence = 0;
   const methods = [];
@@ -114,8 +114,3 @@ function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-generat
     methods
   };
 }
-
-module.exports = {
-  analyzeCommit,
-  analyzeCommitData
-};

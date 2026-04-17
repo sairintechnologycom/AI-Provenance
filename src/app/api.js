@@ -1,14 +1,23 @@
-const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+import express from 'express';
+import { prisma } from './db.js';
 
 const router = express.Router();
+
+/**
+ * Middleware to check if Prisma is available
+ */
+const checkDb = (req, res, next) => {
+  if (!prisma) {
+    return res.status(503).json({ error: 'Database is currently unavailable' });
+  }
+  next();
+};
 
 /**
  * GET /api/repos
  * Returns list of tracked repositories.
  */
-router.get('/repos', async (req, res) => {
+router.get('/repos', checkDb, async (req, res) => {
   try {
     const repos = await prisma.repository.findMany({
       include: { organization: true },
@@ -24,7 +33,7 @@ router.get('/repos', async (req, res) => {
  * GET /api/repos/:owner/:repo/pulls
  * Returns list of PRs for a specific repo.
  */
-router.get('/repos/:owner/:repo/pulls', async (req, res) => {
+router.get('/repos/:owner/:repo/pulls', checkDb, async (req, res) => {
   try {
     const prs = await prisma.pullRequest.findMany({
       where: {
@@ -48,14 +57,18 @@ router.get('/repos/:owner/:repo/pulls', async (req, res) => {
  * GET /api/repos/:owner/:repo/pulls/:number/packet
  * Utility mapping PR numbers to their associated packet.
  */
-router.get('/repos/:owner/:repo/pulls/:number/packet', async (req, res) => {
+router.get('/repos/:owner/:repo/pulls/:number/packet', checkDb, async (req, res) => {
   try {
+    const repo = await prisma.repository.findFirst({
+      where: { owner: req.params.owner, name: req.params.repo }
+    });
+
+    if (!repo) return res.status(404).json({ error: 'Repository not found' });
+
     const pr = await prisma.pullRequest.findUnique({
       where: {
         repositoryId_number: {
-          repositoryId: (await prisma.repository.findFirst({
-            where: { owner: req.params.owner, name: req.params.repo }
-          })).id,
+          repositoryId: repo.id,
           number: parseInt(req.params.number)
         }
       },
@@ -74,7 +87,7 @@ router.get('/repos/:owner/:repo/pulls/:number/packet', async (req, res) => {
  * GET /api/packets/:id
  * Canonical endpoint for retrieving full packet details.
  */
-router.get('/packets/:id', async (req, res) => {
+router.get('/packets/:id', checkDb, async (req, res) => {
   try {
     const packet = await prisma.mergeBriefPacket.findUnique({
       where: { id: req.params.id },
@@ -102,7 +115,7 @@ router.get('/packets/:id', async (req, res) => {
 /**
  * GET /api/jobs/:id
  */
-router.get('/jobs/:id', async (req, res) => {
+router.get('/jobs/:id', checkDb, async (req, res) => {
   try {
     const job = await prisma.analysisJob.findUnique({
       where: { id: req.params.id }
@@ -114,4 +127,4 @@ router.get('/jobs/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

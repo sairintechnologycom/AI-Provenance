@@ -1,12 +1,13 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+import { prisma } from './db.js';
 
 /**
  * Logs a beta event to the database.
  * @param {string} eventName - Name of the event (e.g., 'packet_completed').
  * @param {object} payload - Metadata for the event.
  */
-async function logAppEvent(eventName, payload = {}) {
+export async function logAppEvent(eventName, payload = {}) {
+  if (!prisma) return;
+  
   try {
     await prisma.appEvent.create({
       data: {
@@ -18,5 +19,3 @@ async function logAppEvent(eventName, payload = {}) {
     console.error(`[Analytics Error] Failed to log event ${eventName}:`, error.message);
   }
 }
-
-module.exports = { logAppEvent };
