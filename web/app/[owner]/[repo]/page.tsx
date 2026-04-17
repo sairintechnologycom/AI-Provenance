@@ -1,8 +1,16 @@
 import Link from 'next/link';
+import { getServerSession } from 'next-auth';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RepoPullRequests({ params }: { params: { owner: string, repo: string } }) {
+  const session = await getServerSession();
+
+  if (!session) {
+    redirect('/api/auth/signin');
+  }
+
   const res = await fetch(`http://localhost:3000/api/repos/${params.owner}/${params.repo}/pulls`, { cache: 'no-store' });
   const pulls = res.ok ? await res.json() : [];
 
@@ -10,7 +18,7 @@ export default async function RepoPullRequests({ params }: { params: { owner: st
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">
-          <Link href="/" className="text-blue-600 hover:underline">Repositories</Link> / {params.owner} / {params.repo}
+          <Link href="/" className="text-blue-600 hover:underline">Dashboard</Link> / {params.owner} / {params.repo}
         </h2>
       </div>
 

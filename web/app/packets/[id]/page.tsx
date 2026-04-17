@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import MergeNoteForm from '@/components/MergeNoteForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,26 @@ export default async function PacketDetail({ params }: { params: { id: string } 
 
   const packet = await res.json();
   const repo = packet.pullRequest.repository;
+
+  // Beta Instrumentation: Log view event
+  try {
+    const { prisma } = require('@/lib/prisma');
+    const { getServerSession } = require('next-auth');
+    const session = await getServerSession();
+    
+    await prisma.appEvent.create({
+      data: {
+        event: 'packet_viewed',
+        payload: {
+          packetId: params.id,
+          repo: `${repo.owner}/${repo.name}`,
+          user: session?.user?.email || 'anonymous'
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[Analytics Error] Failed to log packet view:', err);
+  }
 
   return (
     <div className="space-y-6">
@@ -102,6 +123,12 @@ export default async function PacketDetail({ params }: { params: { id: string } 
         </div>
 
         <div className="space-y-6">
+          <MergeNoteForm 
+            packetId={packet.id} 
+            currentStatus={packet.pullRequest.status} 
+            existingNote={packet.pullRequest.approvalNote} 
+          />
+
           <section className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
             <h3 className="text-lg font-semibold mb-4">Authorship</h3>
             <div className="flex items-end gap-2 mb-4">

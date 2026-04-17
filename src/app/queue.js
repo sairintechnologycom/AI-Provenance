@@ -10,6 +10,8 @@ const { evaluateDeterministicRisks } = require('../core/risk-engine');
 const { buildPacket } = require('../core/packet-builder');
 const { updateCheckRun } = require('../core/checks');
 const { PrismaClient } = require('@prisma/client');
+const { sendSlackNotification } = require('./slack');
+const { logAppEvent } = require('./analytics');
 
 const prisma = new PrismaClient();
 
@@ -60,11 +62,11 @@ async function processNext() {
       await prisma.mergeBriefPacket.update({
         where: { id: jobParams.packetId },
         data: { status: 'FAILED' }
-      });
-      
-    } catch (e) {
-      console.error('[AsyncQueue] Could not report failure state:', e);
-    }
+    await logAppEvent('packet_failed', {
+      pr: jobParams.prRecord.number,
+      repo: jobParams.repoRecord.name,
+      error: error.message
+    });
   }
 
   // Allow event loop to breathe
@@ -78,6 +80,7 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   const pull_number = pull_request.number;
 
   console.log(`[AsyncQueue] Processing PR #${pull_number} in background...`);
+  await logAppEvent('packet_started', { pr: pull_number, repo });
 
   // 1. Move check to in_progress
   await updateCheckRun(octokit, {
@@ -226,6 +229,41 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       summary: checkSummary
     },
     packetUrl
+  });
+
+  // 9. Slack Notification
+  try {
+    const repoWithOrg = await prisma.repository.findUnique({
+      where: { id: repoRecord.id },
+      include: { organization: { include: { workspace: true } } }
+    });
+
+    const workspace = repoWithOrg?.organization?.workspace;
+    const currentPacket = await prisma.mergeBriefPacket.findUnique({
+      where: { id: packetId }
+    });
+
+    if (workspace && workspace.slackWebhookUrl && !currentPacket.slackSentAt) {
+      console.log(`[AsyncQueue] Sending Slack notification for PR #${pull_number}...`);
+      await sendSlackNotification(workspace.slackWebhookUrl, builtPacket, {
+        number: pull_number,
+        repository: { owner, name: repo }
+      });
+
+      await prisma.mergeBriefPacket.update({
+        where: { id: packetId },
+        data: { slackSentAt: new Date() }
+      });
+    }
+  } catch (slackErr) {
+    console.error(`[AsyncQueue] Non-fatal Slack error:`, slackErr.message);
+  }
+
+  await logAppEvent('packet_completed', {
+    pr: pull_number,
+    repo,
+    confidence: builtPacket.confidence,
+    files: builtPacket.filesChangedCount
   });
 
   console.log(`[AsyncQueue] PR #${pull_number} completed successfully.`);
