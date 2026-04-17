@@ -24,7 +24,7 @@
       "confidence": 100,
       "status": "PENDING",
       "approvalNote": null,
-      "merged": true,
+      "merged": false,
       "id": "pr-1776393048742"
     }
   ],

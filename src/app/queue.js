@@ -232,5 +232,6 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
 }
 
 module.exports = {
-  queueJob
+  queueJob,
+  processQueue: processNext
 };

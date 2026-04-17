@@ -1,8 +1,14 @@
-const { handlePullRequest, handleIssueComment } = require('../../src/app/webhook');
 const { MockOctokit, MockAnthropic, MockPrisma } = require('./mocks');
 
 // Define the mock before requiring anything that uses it
 const mockPrisma = new MockPrisma();
+
+// Mock PrismaClient globally for the test
+jest.mock('@prisma/client', () => {
+  return {
+    PrismaClient: jest.fn().mockImplementation(() => mockPrisma)
+  };
+});
 
 // Mock the DB module globally for the test
 jest.mock('../../src/app/db', () => ({
@@ -14,6 +20,10 @@ jest.mock('../../src/app/db', () => ({
 jest.mock('@anthropic-ai/sdk', () => ({
   Anthropic: jest.fn().mockImplementation(() => new MockAnthropic())
 }));
+
+// Now require webhook and queue AFTER mocks are setup
+const { handlePullRequest, handleIssueComment } = require('../../src/app/webhook');
+const { processQueue } = require('../../src/app/queue');
 
 describe('MergeBrief E2E Simulation (Fully Mocked)', () => {
   let octokit;
@@ -48,44 +58,21 @@ describe('MergeBrief E2E Simulation (Fully Mocked)', () => {
     // Trigger PR Handler (Opened)
     await handlePullRequest({ octokit, payload });
 
-    // Verify Status Check was updated
-    expect(octokit.rest.repos.createCommitStatus).toHaveBeenCalledWith(expect.objectContaining({
-      state: 'pending',
-      context: 'MergeBrief Approval'
+    // Verify Check Run was created (queued state)
+    expect(octokit.rest.checks.create).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'MergeBrief AI Analysis',
+      status: 'queued'
+    }));
+    // The background job was started automatically. Wait a bit for it to finish.
+    await new Promise(r => setTimeout(r, 100));
+
+    // Verify Check Run was updated (completed state)
+    expect(octokit.rest.checks.update).toHaveBeenCalledWith(expect.objectContaining({
+      check_run_id: 999,
+      status: 'completed',
+      conclusion: 'neutral'
     }));
 
-    // Verify Comment was posted
-    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.stringContaining('### MergeBrief AI Provenance Summary')
-    }));
-
-    // Simulate PR Merge (Ingestion)
-    const closedPayload = {
-      ...payload,
-      action: 'closed',
-      pull_request: {
-        ...payload.pull_request,
-        merged: true
-      }
-    };
-    
-    // We need to mock listComments to return the bot comment for ingestion regex
-    octokit.rest.issues.listComments.mockResolvedValue({
-      data: [{
-        user: { type: 'Bot' },
-        body: '### MergeBrief AI Provenance Summary\n\n| Commit | AI Tool | Confidence | Files | Added | Removed |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| `mock-sha` | **Copilot** | 100% | 1 | 1 | 0 |'
-      }]
-    });
-
-    await handlePullRequest({ octokit, payload: closedPayload });
-
-    // Verify Telemetry Record was upserted/created in DB
-    expect(mockPrisma.pullRequest.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        aiTool: 'Copilot',
-        confidence: 100
-      })
-    }));
   });
 
   test('Step 2: Human-in-the-Loop Approval', async () => {

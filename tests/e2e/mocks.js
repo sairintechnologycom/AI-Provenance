@@ -23,7 +23,14 @@ class MockOctokit {
         getCollaboratorPermissionLevel: jest.fn().mockResolvedValue({
           data: { permission: 'admin' }
         }),
-        createCommitStatus: jest.fn().mockResolvedValue({})
+        createCommitStatus: jest.fn().mockResolvedValue({}),
+        getContent: jest.fn().mockResolvedValue({
+          data: { content: Buffer.from('* @maintainer-tom\n').toString('base64') }
+        })
+      },
+      checks: {
+        create: jest.fn().mockResolvedValue({ data: { id: 999 } }),
+        update: jest.fn().mockResolvedValue({ data: { id: 999 } })
       },
       pulls: {
         listCommits: jest.fn().mockResolvedValue({
@@ -163,6 +170,16 @@ class MockPrisma {
         this.save();
         return Promise.resolve({});
       })
+    };
+
+    this.mergeBriefPacket = {
+      create: jest.fn().mockImplementation(({ data }) => {
+        const packet = { ...data, id: `packet-${Date.now()}` };
+        return Promise.resolve(packet);
+      }),
+      deleteMany: jest.fn().mockResolvedValue({}),
+      findUnique: jest.fn().mockResolvedValue({ id: 'packet-1', pullRequestId: 'pr-1' }),
+      update: jest.fn().mockResolvedValue({ id: 'packet-1' })
     };
   }
 
