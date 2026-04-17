@@ -62,6 +62,11 @@ async function processNext() {
       await prisma.mergeBriefPacket.update({
         where: { id: jobParams.packetId },
         data: { status: 'FAILED' }
+      });
+    } catch (e) {
+      console.error('[AsyncQueue] Could not report failure state:', e);
+    }
+
     await logAppEvent('packet_failed', {
       pr: jobParams.prRecord.number,
       repo: jobParams.repoRecord.name,

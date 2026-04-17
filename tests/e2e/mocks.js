@@ -120,6 +120,10 @@ class MockPrisma {
         this.state.repositories = [];
         this.save();
         return Promise.resolve({});
+      }),
+      findUnique: jest.fn().mockImplementation(({ where }) => {
+        const repo = this.state.repositories.find(r => r.id === where.id);
+        return Promise.resolve(repo ? { ...repo, organization: { include: { workspace: true } } } : null);
       })
     };
 
@@ -180,6 +184,16 @@ class MockPrisma {
       deleteMany: jest.fn().mockResolvedValue({}),
       findUnique: jest.fn().mockResolvedValue({ id: 'packet-1', pullRequestId: 'pr-1' }),
       update: jest.fn().mockResolvedValue({ id: 'packet-1' })
+    };
+
+    this.appEvent = {
+      create: jest.fn().mockResolvedValue({ id: 'event-1' }),
+      deleteMany: jest.fn().mockResolvedValue({})
+    };
+
+    this.workspace = {
+      findUnique: jest.fn().mockResolvedValue({ id: 'ws-1', slackWebhookUrl: 'https://hooks.slack.com/services/mock' }),
+      update: jest.fn().mockResolvedValue({ id: 'ws-1' })
     };
   }
 
