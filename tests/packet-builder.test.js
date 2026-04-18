@@ -1,4 +1,4 @@
-const { buildPacket, assessPacketCompleteness } = require('../src/core/packet-builder');
+import { buildPacket, assessPacketCompleteness } from '../src/core/packet-builder.js';
 
 describe('packet-builder', () => {
   it('should build a canonically structured packet from varied inputs', () => {

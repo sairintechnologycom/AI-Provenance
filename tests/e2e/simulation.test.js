@@ -1,29 +1,30 @@
-const { MockOctokit, MockAnthropic, MockPrisma } = require('./mocks');
+import { jest } from '@jest/globals';
+import { MockOctokit, MockAnthropic, MockPrisma } from './mocks.js';
 
-// Define the mock before requiring anything that uses it
+// Define the mock instance
 const mockPrisma = new MockPrisma();
 
-// Mock PrismaClient globally for the test
-jest.mock('@prisma/client', () => {
+// 1. Mock PrismaClient globally
+jest.unstable_mockModule('@prisma/client', () => {
   return {
     PrismaClient: jest.fn().mockImplementation(() => mockPrisma)
   };
 });
 
-// Mock the DB module globally for the test
-jest.mock('../../src/app/db', () => ({
+// 2. Mock the DB module
+jest.unstable_mockModule('../../src/app/db.js', () => ({
   prisma: mockPrisma,
   getPrisma: () => mockPrisma
 }));
 
-// Mock Anthropic SDK globally for the test
-jest.mock('@anthropic-ai/sdk', () => ({
+// 3. Mock Anthropic SDK
+jest.unstable_mockModule('@anthropic-ai/sdk', () => ({
   Anthropic: jest.fn().mockImplementation(() => new MockAnthropic())
 }));
 
-// Now require webhook and queue AFTER mocks are setup
-const { handlePullRequest, handleIssueComment } = require('../../src/app/webhook');
-const { processQueue } = require('../../src/app/queue');
+// 4. Import the modules under test (must be after mock definitions in ESM)
+const { handlePullRequest, handleIssueComment } = await import('../../src/app/webhook.js');
+const { processQueue } = await import('../../src/app/queue.js');
 
 describe('MergeBrief E2E Simulation (Fully Mocked)', () => {
   let octokit;
@@ -63,8 +64,9 @@ describe('MergeBrief E2E Simulation (Fully Mocked)', () => {
       name: 'MergeBrief AI Analysis',
       status: 'queued'
     }));
+    
     // The background job was started automatically. Wait a bit for it to finish.
-    await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 200));
 
     // Verify Check Run was updated (completed state)
     expect(octokit.rest.checks.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -72,7 +74,6 @@ describe('MergeBrief E2E Simulation (Fully Mocked)', () => {
       status: 'completed',
       conclusion: 'neutral'
     }));
-
   });
 
   test('Step 2: Human-in-the-Loop Approval', async () => {

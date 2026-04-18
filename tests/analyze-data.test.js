@@ -1,4 +1,4 @@
-const { analyzeCommitData } = require('../src/core/detect');
+import { analyzeCommitData } from '../src/core/detect.js';
 
 describe('analyzeCommitData', () => {
   const sampleSha = 'a1b2c3d4';

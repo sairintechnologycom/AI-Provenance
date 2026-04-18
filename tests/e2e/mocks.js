@@ -1,5 +1,10 @@
-const fs = require('fs');
-const path = require('path');
+import { jest } from '@jest/globals';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DB_STATE_PATH = path.join(__dirname, 'db_state.json');
 
@@ -8,7 +13,7 @@ const DB_STATE_PATH = path.join(__dirname, 'db_state.json');
  * Updated to support persistent JSON state for verification.
  */
 
-class MockOctokit {
+export class MockOctokit {
   constructor() {
     this.rest = {
       repos: {
@@ -62,7 +67,7 @@ class MockOctokit {
   }
 }
 
-class MockAnthropic {
+export class MockAnthropic {
   constructor() {
     this.messages = {
       create: jest.fn().mockResolvedValue({
@@ -78,7 +83,7 @@ class MockAnthropic {
   }
 }
 
-class MockPrisma {
+export class MockPrisma {
   constructor() {
     this.state = {
       organizations: [],
@@ -212,8 +217,3 @@ class MockPrisma {
   }
 }
 
-module.exports = {
-  MockOctokit,
-  MockAnthropic,
-  MockPrisma
-};

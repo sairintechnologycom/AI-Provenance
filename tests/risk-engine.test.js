@@ -1,4 +1,4 @@
-const { evaluateDeterministicRisks } = require('../src/core/risk-engine');
+import { evaluateDeterministicRisks } from '../src/core/risk-engine.js';
 
 describe('risk-engine', () => {
   it('should identify auth and config patterns correctly', () => {

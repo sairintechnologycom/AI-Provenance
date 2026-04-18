@@ -1,9 +1,11 @@
-const { analyzeCommit } = require('../src/core/detect');
-const { getExecOutput } = require('@actions/exec');
+import { jest } from '@jest/globals';
 
-jest.mock('@actions/exec', () => ({
+jest.unstable_mockModule('@actions/exec', () => ({
   getExecOutput: jest.fn(),
 }));
+
+const { analyzeCommit } = await import('../src/core/detect.js');
+const { getExecOutput } = await import('@actions/exec');
 
 describe('analyzeCommit', () => {
   afterEach(() => {

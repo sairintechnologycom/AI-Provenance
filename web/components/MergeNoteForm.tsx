@@ -18,6 +18,7 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
       });
       if (res.ok) {
         setStatus('success');
+        setTimeout(() => setStatus('idle'), 3000);
         router.refresh();
       } else {
         setStatus('error');
@@ -28,35 +29,61 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+    <div className="glass-card p-8 space-y-6 relative overflow-hidden group">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Reviewer Approval</h3>
+        <h3 className="text-xl font-bold text-white tracking-tight">Reviewer Rationale</h3>
         {currentStatus === 'APPROVED' && (
-          <span className="flex items-center gap-1 text-xs font-bold text-green-600 uppercase">
-             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/30 text-[10px] font-black text-green-400 uppercase tracking-widest">
+             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
              </svg>
-             Approved
-          </span>
+             Governance Approved
+          </div>
         )}
       </div>
-      <p className="text-sm text-gray-500">Record a brief rationale for why this AI-generated code is acceptable for merge.</p>
-      <textarea
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm h-32"
-        placeholder="Reviewed the AST and logic. No dangerous side effects found."
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
-      <div className="flex justify-end gap-3">
-        {status === 'success' && <span className="text-green-600 text-sm self-center">Note saved!</span>}
+      
+      <p className="text-sm text-white/50 leading-relaxed font-medium">Record a human audit trail explaining why this AI-assisted logic is acceptable for deployment.</p>
+      
+      <div className="relative">
+        <textarea
+          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-white placeholder:text-white/20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-300 text-sm h-40 resize-none leading-relaxed"
+          placeholder="e.g. Reviewed the connection pooling logic personally. The AI correctly identified the contention issue and implemented a robust retry strategy."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="absolute bottom-4 right-4 text-[10px] font-bold text-white/20 uppercase tracking-widest">
+          Audit Trail Required
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4">
         <button
           onClick={handleSave}
           disabled={status === 'saving' || !note.trim()}
-          className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition disabled:opacity-50"
+          className="w-full bg-primary hover:bg-primary-dark text-white py-4 rounded-xl font-bold transition-all disabled:opacity-50 shadow-[0_10px_30px_rgba(59,130,246,0.3)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
         >
-          {status === 'saving' ? 'Saving...' : 'Submit Approval Note'}
+          {status === 'saving' ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span>Persisting Audit Note...</span>
+            </>
+          ) : (
+            'Commit Governance Decision'
+          )}
         </button>
+        
+        {status === 'success' && (
+          <div className="text-center animate-slide-up">
+            <span className="text-green-400 text-xs font-bold uppercase tracking-widest">✓ Audit Trail Updated Successfully</span>
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="text-center animate-slide-up">
+            <span className="text-red-400 text-xs font-bold uppercase tracking-widest">Failed to persist decision. Try again.</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+

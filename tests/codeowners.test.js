@@ -1,4 +1,5 @@
-const { getSuggestedReviewers } = require('../src/core/codeowners');
+import { getSuggestedReviewers } from '../src/core/codeowners.js';
+
 
 describe('CODEOWNERS Logic', () => {
   const mockCodeOwners = `
