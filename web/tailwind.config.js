@@ -20,8 +20,8 @@ module.exports = {
           high: '#ef4444',
         },
         glass: {
-          border: 'rgba(255, 255, 255, 0.1)',
-          background: 'rgba(255, 255, 255, 0.03)',
+          DEFAULT: 'var(--glass)',
+          border: 'var(--glass-border)',
         }
       },
       backgroundImage: {
