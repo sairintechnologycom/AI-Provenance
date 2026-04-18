@@ -127,4 +127,35 @@ router.get('/jobs/:id', checkDb, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/leads
+ * Returns list of waitlist signups.
+ */
+router.get('/admin/leads', checkDb, async (req, res) => {
+  try {
+    const leads = await prisma.lead.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(leads);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * GET /api/admin/events
+ * Returns recent system events.
+ */
+router.get('/admin/events', checkDb, async (req, res) => {
+  try {
+    const events = await prisma.appEvent.findMany({
+      take: 50,
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(events);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 export default router;

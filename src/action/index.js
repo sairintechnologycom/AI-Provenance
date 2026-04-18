@@ -15,7 +15,18 @@ async function run() {
     
     const result = await analyzeCommit(repoPath, sha, trailerKey);
     
-    // Check if result has expected structure, otherwise handle undefined
+    // 1. Handle error states (like Shallow Clone) gracefully
+    if (result?.error === 'SHALLOW_CLONE') {
+      core.warning(result.message);
+      await core.summary
+        .addHeading('AI Provenance Detection: Warning')
+        .addRaw(`⚠️ **${result.message}**\n\n`)
+        .addRaw(`To resolve this, update your workflow file to include \`fetch-depth: 0\` in the checkout step:\n\n`)
+        .addCodeBlock(`- uses: actions/checkout@v4\n  with:\n    fetch-depth: 0`, 'yaml')
+        .write();
+      return;
+    }
+
     if (!result) {
       core.info('No detection result generated.');
       return;

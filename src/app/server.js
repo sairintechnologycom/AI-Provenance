@@ -65,6 +65,53 @@ app.get('/health', (req, res) => {
 // APIs
 app.use('/api', apiRouter);
 
+// Slack Interactivity
+app.post('/api/slack/interact', async (req, res) => {
+  try {
+    const payload = JSON.parse(req.body.payload);
+    const { action_id, value } = payload.actions[0];
+
+    if (action_id === 'approve_pr') {
+      const { packetId, prNumber, owner, repo } = JSON.parse(value);
+      const username = payload.user.username;
+
+      console.log(`[Slack] Approval received for PR #${prNumber} from @${username}`);
+
+      if (prisma) {
+        const updatedPr = await prisma.pullRequest.update({
+          where: { repositoryId_number: { 
+            repositoryId: (await prisma.repository.findUnique({ where: { owner_name: { owner, name: repo } } })).id,
+            number: prNumber 
+          } },
+          data: {
+            status: "APPROVED",
+            approvalNote: `Approved via Slack by @${username}`
+          }
+        });
+
+        // Log event
+        await prisma.appEvent.create({
+          data: {
+            event: 'slack_approved',
+            payload: { prNumber, username, packetId }
+          }
+        });
+      }
+
+      // Respond to Slack to update the message or just acknowledge
+      return res.status(200).send({
+        text: `✅ PR #${prNumber} has been approved by @${username}.`,
+        replace_original: false
+      });
+    }
+
+    res.status(200).send();
+  } catch (error) {
+    console.error(`[Slack Interaction Error] ${error.message}`);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
 // Main Webhook endpoint
 app.post('/webhook', async (req, res) => {
   if (!githubApp) {

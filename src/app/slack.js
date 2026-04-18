@@ -56,16 +56,51 @@ export async function sendSlackNotification(webhookUrl, packet, pr) {
 
   blocks.push({
     type: "actions",
+    block_id: `pr_action_${pr.number}`,
     elements: [
       {
         type: "button",
         text: {
           type: "plain_text",
-          text: "View MergeBrief Packet",
+          text: "🚀 View Packet",
           emoji: true
         },
         url: packetLink,
-        style: "primary"
+        action_id: "view_packet"
+      },
+      {
+        type: "button",
+        text: {
+          type: "plain_text",
+          text: "✅ Approve PR",
+          emoji: true
+        },
+        value: JSON.stringify({
+          packetId: packet.id,
+          prNumber: pr.number,
+          owner: pr.repository.owner,
+          repo: pr.repository.name
+        }),
+        action_id: "approve_pr",
+        style: "primary",
+        confirm: {
+          title: {
+            type: "plain_text",
+            text: "Are you sure?"
+          },
+          text: {
+            type: "plain_text",
+            text: "This will record a 'Global Approval' for this AI-assisted PR."
+          },
+          confirm: {
+            type: "plain_text",
+            text: "Confirm Approval"
+          },
+          deny: {
+            type: "plain_text",
+            text: "Cancel"
+          }
+        }
       }
     ]
   });

@@ -22,7 +22,11 @@ export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-genera
   // 0. Check for shallow clone
   const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
   if (isShallowStr === 'true') {
-    throw new Error('Shallow repository checkout detected. Please set fetch-depth: 0 in your checkout step.');
+    return { 
+      sha: commitSha,
+      error: 'SHALLOW_CLONE',
+      message: 'Shallow repository checkout detected. Analysis cannot walk history.'
+    };
   }
 
   // 1. Fetch data via git
