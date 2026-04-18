@@ -4,3 +4,5 @@ node_modules/
 graphify-out/
 .env
 *.db
+web/.next/
+web/.env.local
