@@ -285,22 +285,3 @@ async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
   }
 }
 
-/**
- * Updates the GitHub Status Check for a specific commit
- */
-export async function updateStatusCheck(octokit, { owner, repo, sha, state, description }) {
-  try {
-    await octokit.rest.repos.createCommitStatus({
-      owner,
-      repo,
-      sha,
-      state, // 'pending', 'success', 'failure', 'error'
-      description: description.substring(0, 140),
-      context: 'MergeBrief Approval',
-      target_url: 'https://github.com/apps/merge-brief'
-    });
-    console.log(`[Webhook] Status check updated to ${state} for ${sha.substring(0, 7)}`);
-  } catch (error) {
-    console.error(`[Webhook] Failed to update Status Check:`, error.message);
-  }
-}
