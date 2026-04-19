@@ -4,10 +4,11 @@ import bodyParser from 'body-parser';
 import morgan from 'morgan';
 import { App } from '@octokit/app';
 import { handlePullRequest, handleIssueComment } from './webhook.js';
-import apiRouter from './api.js';
+import createApiRouter from './api.js';
 import { prisma } from './db.js';
 import { verifySlackSignature } from './auth-utils.js';
 import { recoverJobs } from './queue.js';
+import { updateStatusCheck } from '../core/status.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -68,8 +69,9 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
+
 // APIs
-app.use('/api', apiRouter);
+app.use('/api', createApiRouter(githubApp));
 
 // Slack Interactivity
 app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
@@ -78,6 +80,10 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
     if (!rawPayload) return res.status(400).send('Missing payload');
 
     const payload = JSON.parse(rawPayload);
+    if (!payload.actions || payload.actions.length === 0) {
+       return res.status(200).send();
+    }
+    
     const { action_id, value } = payload.actions[0];
 
     if (action_id === 'approve_pr') {
@@ -90,15 +96,19 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
         throw new Error('Database client not initialized');
       }
 
-      // Find the repository first
-      const repository = await prisma.repository.findUnique({
-        where: { owner_name: { owner, name: repo } }
+      // Find the repository and packet
+      const repository = await prisma.repository.findFirst({
+        where: { owner, name: repo }
       });
 
       if (!repository) {
         console.error(`[Slack] Repository not found: ${owner}/${repo}`);
         return res.status(404).send('Repository not found');
       }
+
+      const packet = await prisma.mergeBriefPacket.findUnique({
+        where: { id: packetId }
+      });
 
       // Update PR status
       await prisma.pullRequest.update({
@@ -113,6 +123,27 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
           approvalNote: `Approved via Slack by @${username}`
         }
       });
+
+      // Update GitHub Status Check
+      if (githubApp && packet) {
+        try {
+          const { data: installations } = await githubApp.octokit.rest.apps.listInstallations();
+          const installation = installations.find(i => i.account.login === owner);
+          
+          if (installation) {
+            const octokit = await githubApp.getInstallationOctokit(installation.id);
+            await updateStatusCheck(octokit, {
+              owner,
+              repo,
+              sha: packet.headSha,
+              state: 'success',
+              description: `Approved via Slack by @${username}`
+            });
+          }
+        } catch (ghErr) {
+          console.error(`[Slack] Failed to update GitHub status:`, ghErr.message);
+        }
+      }
 
       // Log event
       await prisma.appEvent.create({

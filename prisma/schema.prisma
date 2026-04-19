@@ -115,6 +115,8 @@ model PullRequest {
   number       Int
   repositoryId String
   status       String            @default("PENDING")
+  aiTool       String?
+  confidence   Int?
   approvalNote String?
   merged       Boolean           @default(false)
   createdAt    DateTime          @default(now())

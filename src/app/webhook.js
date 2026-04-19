@@ -2,6 +2,7 @@ import { analyzeCommitData } from '../core/detect.js';
 import { analyzeDiffIntent } from '../core/llm.js';
 import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
 import { createCheckRun } from '../core/checks.js';
+import { updateStatusCheck } from '../core/status.js';
 import { queueJob } from './queue.js';
 import { prisma } from './db.js';
 
@@ -205,89 +206,82 @@ export async function handleIssueComment({ octokit, payload }) {
 }
 
 /**
- * Ingest final telemetry data into PostgreSQL
+ * Ingest final telemetry data into Database
  */
 async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
   if (!prisma) return;
 
   try {
-    const orgData = {
-      githubId: String(pull_request.base.repo.owner.id),
-      login: owner
-    };
-
-    const repoData = {
-      githubId: String(pull_request.base.repo.id),
-      owner,
-      name: repo
-    };
-
     const prNumber = pull_request.number;
 
-    // Build the Organization & Repository
-    const dbOrg = await prisma.organization.upsert({
-      where: { githubId: orgData.githubId },
-      update: { login: orgData.login },
-      create: orgData
+    // 1. Find the PR in our database
+    const dbPr = await prisma.pullRequest.findFirst({
+      where: {
+        number: prNumber,
+        repository: {
+          owner,
+          name: repo
+        }
+      },
+      include: {
+        packet: true
+      }
     });
 
-    const dbRepo = await prisma.repository.upsert({
-      where: { githubId: repoData.githubId },
-      update: { owner: repoData.owner, name: repoData.name },
-      create: { ...repoData, organizationId: dbOrg.id }
-    });
-
-    // Fetch comments
-    const { data: comments } = await octokit.rest.issues.listComments({
-      owner,
-      repo,
-      issue_number: prNumber
-    });
-
-    const botComment = comments.find(c => 
-      c.user.type === 'Bot' && c.body.includes('MergeBrief AI Provenance Summary')
-    );
-
-    let aiTool = null;
-    let confidence = null;
-
-    if (botComment) {
-      const toolMatch = botComment.body.match(/\*\*([^*]+)\*\*/);
-      const confMatch = botComment.body.match(/(\d+)%/);
-      if (toolMatch) aiTool = toolMatch[1];
-      if (confMatch) confidence = parseInt(confMatch[1]);
+    if (!dbPr) {
+      console.warn(`[Telemetry] PR #${prNumber} not found in database. Skipping ingestion.`);
+      return;
     }
 
-    const approveComment = comments.reverse().find(c => 
-      c.body.startsWith('/merge-brief-approve:')
-    );
-    const approvalNote = approveComment 
-      ? approveComment.body.replace('/merge-brief-approve:', '').trim() 
-      : null;
+    // 2. Fetch comments to find the approval rationale if not already in DB
+    // (In case they approved via GitHub comment but it wasn't captured or we want to be sure)
+    let approvalNote = dbPr.approvalNote;
+    if (!approvalNote) {
+      const { data: comments } = await octokit.rest.issues.listComments({
+        owner,
+        repo,
+        issue_number: prNumber
+      });
+      const approveComment = comments.reverse().find(c => 
+        c.body.trim().startsWith('/merge-brief-approve:')
+      );
+      if (approveComment) {
+        approvalNote = approveComment.body.replace('/merge-brief-approve:', '').trim();
+      }
+    }
 
-    await prisma.pullRequest.upsert({
-      where: { repositoryId_number: { repositoryId: dbRepo.id, number: prNumber } },
-      update: {
-        merged: pull_request.merged,
-        status: approvalNote ? 'APPROVED' : 'PENDING',
-        approvalNote
-      },
-      create: {
-        githubId: String(pull_request.id),
-        number: prNumber,
-        repositoryId: dbRepo.id,
-        aiTool,
-        confidence,
-        status: approvalNote ? 'APPROVED' : 'PENDING',
-        approvalNote,
-        merged: pull_request.merged
+    // 3. Update PR with final state
+    // We use the packet data as the source of truth for AI metrics if not on PR
+    await prisma.pullRequest.update({
+      where: { id: dbPr.id },
+      data: {
+        merged: true,
+        status: approvalNote ? 'APPROVED' : dbPr.status,
+        approvalNote: approvalNote,
+        aiTool: dbPr.aiTool || dbPr.packet?.aiTool,
+        confidence: dbPr.confidence || dbPr.packet?.confidence,
+        updatedAt: new Date()
+      }
+    });
+
+    // 4. Log final telemetry event
+    await prisma.appEvent.create({
+      data: {
+        event: 'pr_merged_telemetry',
+        payload: {
+          prNumber,
+          repo: `${owner}/${repo}`,
+          aiTool: dbPr.aiTool || dbPr.packet?.aiTool,
+          confidence: dbPr.confidence || dbPr.packet?.confidence,
+          approved: !!approvalNote
+        }
       }
     });
 
     console.log(`[Webhook] Successfully ingested telemetry for PR #${prNumber}`);
 
   } catch (error) {
-    console.error(`[Webhook] Ingestion failed:`, error.message);
+    console.error(`[Webhook] Telemetry ingestion failed:`, error.message);
   }
 }
 

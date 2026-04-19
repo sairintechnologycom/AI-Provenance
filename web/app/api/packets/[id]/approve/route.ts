@@ -1,6 +1,5 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession();
@@ -16,39 +15,30 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }
 
   try {
-    const packet = await prisma.mergeBriefPacket.findUnique({
-      where: { id: params.id },
-      include: { pullRequest: true }
+    // Proxy the approval to the backend service which has the GitHub App context
+    // This ensures both DB is updated AND GitHub Status Check is cleared.
+    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+    
+    const response = await fetch(`${backendUrl}/api/packets/${params.id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        note,
+        username: session.user.email
+      }),
     });
 
-    if (!packet) {
-      return NextResponse.json({ error: "Packet not found" }, { status: 404 });
+    if (!response.ok) {
+      const errorData = await response.json();
+      return NextResponse.json({ error: errorData.error || "Backend approval failed" }, { status: response.status });
     }
 
-    const updatedPr = await prisma.pullRequest.update({
-      where: { id: packet.pullRequestId },
-      data: {
-        status: "APPROVED",
-        approvalNote: note
-      }
-    });
-
-    // Beta Instrumentation: Log approval event
-    await prisma.appEvent.create({
-      data: {
-        event: 'reviewer_approved',
-        payload: {
-          packetId: params.id,
-          prNumber: updatedPr.number,
-          user: session.user.email,
-          noteLength: note.length
-        }
-      }
-    });
-
-    return NextResponse.json({ success: true, pullRequest: updatedPr });
+    const result = await response.json();
+    return NextResponse.json(result);
   } catch (error: any) {
-    console.error("[Approval API Error]", error.message);
+    console.error("[Approval Proxy Error]", error.message);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
