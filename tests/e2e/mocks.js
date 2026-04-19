@@ -200,6 +200,14 @@ export class MockPrisma {
       findUnique: jest.fn().mockResolvedValue({ id: 'ws-1', slackWebhookUrl: 'https://hooks.slack.com/services/mock' }),
       update: jest.fn().mockResolvedValue({ id: 'ws-1' })
     };
+
+    this.analysisJob = {
+      create: jest.fn().mockImplementation(({ data }) => {
+        const job = { ...data, id: `job-${Date.now()}` };
+        return Promise.resolve(job);
+      }),
+      update: jest.fn().mockResolvedValue({ id: 'job-1' })
+    };
   }
 
   init() {

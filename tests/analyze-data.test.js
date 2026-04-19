@@ -57,8 +57,8 @@ describe('analyzeCommitData', () => {
     });
 
     expect(result.aiTool).toBe('Unknown AI');
-    expect(result.confidence).toBe(80);
-    expect(result.methods).toContain('heuristic');
+    expect(result.confidence).toBe(85);
+    expect(result.methods).toContain('heuristic-explicit');
   });
 
   it('should return null aiTool if no fingerprints found', () => {

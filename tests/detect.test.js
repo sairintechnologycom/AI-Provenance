@@ -66,11 +66,11 @@ describe('analyzeCommit', () => {
     expect(result).toEqual({
       sha: 'HEAD',
       aiTool: 'Unknown AI',
-      confidence: 80,
+      confidence: 85,
       files: 1,
       linesAdded: 100,
       linesRemoved: 0,
-      methods: ['heuristic']
+      methods: ['heuristic-explicit']
     });
   });
 
