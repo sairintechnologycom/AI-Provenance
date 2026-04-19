@@ -6,3 +6,5 @@ graphify-out/
 *.db
 web/.next/
 web/.env.local
+logs/
+scratch/

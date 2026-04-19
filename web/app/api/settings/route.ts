@@ -48,3 +48,33 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
   }
 }
+
+export async function DELETE() {
+  const session = await getServerSession();
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      // @ts-ignore
+      where: { id: session.user.id }
+    });
+
+    if (!user || !user.workspaceId) {
+      return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+    }
+
+    // Disconnect all organizations from this workspace
+    await prisma.organization.updateMany({
+      where: { workspaceId: user.workspaceId },
+      data: { workspaceId: null }
+    });
+
+    return NextResponse.json({ success: true, message: "GitHub access revoked successfully" });
+  } catch (error: any) {
+    console.error("[Settings Delete Error]", error.message);
+    return NextResponse.json({ error: "Failed to revoke access" }, { status: 500 });
+  }
+}

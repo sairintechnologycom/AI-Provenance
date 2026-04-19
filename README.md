@@ -1,10 +1,11 @@
-# AI Provenance Detection
+# MergeBrief
 
-**AI Provenance** is a detection engine and CI/CD toolkit designed to identify and track AI-generated code. It analyzes git commits for known AI artifacts, heuristics, and semantic patterns, providing organization-wide visibility into AI-assisted development.
+**The Proof of Human Intelligence.**
 
-## 🚀 Choose Your Mode
+MergeBrief is an AI provenance detection engine and governance toolkit designed to identify, track, and govern AI-generated code. It analyzes git commits for known AI artifacts, heuristics, and semantic patterns, providing organization-wide visibility while preserving human accountability in the loop.
 
-AI Provenance can be deployed in four flexible levels of integration:
+## 🚀 Deployment Modes
+MergeBrief adapts to your engineering workflow with four flexible levels of integration:
 
 | Mode | Deployment | Best For | Key Features |
 | :--- | :--- | :--- | :--- |

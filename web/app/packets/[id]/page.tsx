@@ -4,7 +4,8 @@ import MergeNoteForm from '@/components/MergeNoteForm';
 export const dynamic = 'force-dynamic';
 
 export default async function PacketDetail({ params }: { params: { id: string } }) {
-  const res = await fetch(`http://localhost:3000/api/packets/${params.id}`, { cache: 'no-store' });
+  const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
+  const res = await fetch(`${backendUrl}/api/packets/${params.id}`, { cache: 'no-store' });
   
   if (!res.ok) {
     return (

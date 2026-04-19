@@ -69,9 +69,9 @@ export default async function RootLayout({
           <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 text-white/40 text-sm">
             <p>&copy; {new Date().getFullYear()} MergeBrief AI. All rights reserved.</p>
             <div className="flex gap-8">
-              <Link href="#" className="hover:text-white transition-colors">Privacy</Link>
-              <Link href="#" className="hover:text-white transition-colors">Terms</Link>
-              <Link href="#" className="hover:text-white transition-colors">Docs</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+              <Link href="https://github.com/aincloudtools/AI-Provenance#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</Link>
             </div>
           </footer>
         </SessionProvider>

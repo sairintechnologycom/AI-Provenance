@@ -285,3 +285,114 @@ async function ingestTelemetry(octokit, { owner, repo, pull_request }) {
   }
 }
 
+/**
+ * Handle installation events (App installed)
+ */
+export async function handleInstallation({ payload }) {
+  const { action, installation, repositories } = payload;
+  const owner = installation.account.login;
+  const githubId = String(installation.account.id);
+
+  console.log(`[Webhook] Installation ${action} for ${owner} (ID: ${installation.id})`);
+
+  if (action === 'deleted' || action === 'suspend') {
+    // Handle deactivation logic if needed
+    return;
+  }
+
+  try {
+    if (prisma) {
+      // 1. Find or create Organization
+      let dbOrg = await prisma.organization.upsert({
+        where: { githubId },
+        update: { login: owner },
+        create: { githubId, login: owner }
+      });
+
+      // 2. Auto-link to the first available workspace if not linked
+      if (!dbOrg.workspaceId) {
+        const firstWorkspace = await prisma.workspace.findFirst();
+        if (firstWorkspace) {
+           dbOrg = await prisma.organization.update({
+             where: { id: dbOrg.id },
+             data: { workspaceId: firstWorkspace.id }
+           });
+           console.log(`[Webhook] Auto-linked ${owner} to workspace: ${firstWorkspace.name}`);
+        }
+      }
+
+      // 3. Sync repositories if provided
+      if (repositories && repositories.length > 0) {
+        for (const repo of repositories) {
+          await prisma.repository.upsert({
+            where: { githubId: String(repo.id) },
+            update: { owner, name: repo.name },
+            create: {
+              githubId: String(repo.id),
+              owner,
+              name: repo.name,
+              organizationId: dbOrg.id
+            }
+          });
+        }
+      }
+
+      // 4. Log event
+      await prisma.appEvent.create({
+        data: {
+          event: `installation_${action}`,
+          payload: { owner, installationId: installation.id, repoCount: repositories?.length || 0 }
+        }
+      });
+    }
+  } catch (error) {
+    console.error(`[Webhook] Error handling installation.${action}:`, error.message);
+  }
+}
+
+/**
+ * Handle installation_repositories events (Repos added/removed)
+ */
+export async function handleInstallationRepositories({ payload }) {
+  const { action, installation, repositories_added, repositories_removed } = payload;
+  const owner = installation.account.login;
+
+  console.log(`[Webhook] Installation repositories ${action} for ${owner}`);
+
+  try {
+    if (prisma) {
+      const dbOrg = await prisma.organization.findUnique({
+        where: { githubId: String(installation.account.id) }
+      });
+
+      if (!dbOrg) {
+        console.warn(`[Webhook] Organization not found for installation: ${owner}`);
+        return;
+      }
+
+      if (repositories_added) {
+        for (const repo of repositories_added) {
+          await prisma.repository.upsert({
+            where: { githubId: String(repo.id) },
+            update: { owner, name: repo.name },
+            create: {
+              githubId: String(repo.id),
+              owner,
+              name: repo.name,
+              organizationId: dbOrg.id
+            }
+          });
+        }
+      }
+
+      if (repositories_removed) {
+        for (const repo of repositories_removed) {
+          // We don't delete history, just mark as inactive
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[Webhook] Error handling installation_repositories.${action}:`, error.message);
+  }
+}
+

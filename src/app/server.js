@@ -3,6 +3,8 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import morgan from 'morgan';
 import { App } from '@octokit/app';
+import { Webhooks } from '@octokit/webhooks';
+import logger from './logger.js';
 import { handlePullRequest, handleIssueComment } from './webhook.js';
 import createApiRouter from './api.js';
 import { prisma } from './db.js';
@@ -14,27 +16,39 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Verify required environment variables
-const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'ANTHROPIC_API_KEY', 'SLACK_SIGNING_SECRET'];
+const requiredEnv = [
+  'APP_ID', 
+  'PRIVATE_KEY', 
+  'WEBHOOK_SECRET', 
+  'ANTHROPIC_API_KEY', 
+  'SLACK_SIGNING_SECRET',
+  'DATABASE_URL'
+];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {
-  console.error(`FATAL: Missing environment variables: ${missingEnv.join(', ')}`);
-  // Not exiting here to allow for inspection, but server won't function for GitHub webhooks
-  console.warn('Server will start, but GitHub Webhook features will crash without these variables.');
+  logger.error(`FATAL: Missing environment variables: ${missingEnv.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('Production mode detected. Exiting due to missing secrets.');
+    process.exit(1);
+  }
+  logger.warn('Server will start, but core features will fail without these variables.');
 }
 
-// Initialize GitHub App
+// Initialize GitHub App or Mock fallback
 let githubApp;
+const webhookSecret = process.env.WEBHOOK_SECRET || 'test-secret';
+
 if (process.env.APP_ID && process.env.PRIVATE_KEY) {
   githubApp = new App({
     appId: process.env.APP_ID,
     privateKey: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
     webhooks: {
-      secret: process.env.WEBHOOK_SECRET
+      secret: webhookSecret
     }
   });
 
-  // Event Subscriptions
+  // Event Subscriptions (App mode)
   githubApp.webhooks.on('pull_request', async ({ octokit, payload }) => {
     await handlePullRequest({ octokit, payload });
   });
@@ -43,13 +57,82 @@ if (process.env.APP_ID && process.env.PRIVATE_KEY) {
     await handleIssueComment({ octokit, payload });
   });
 
+  githubApp.webhooks.on('installation', async ({ payload }) => {
+    await import('./webhook.js').then(m => m.handleInstallation({ payload }));
+  });
+
+  githubApp.webhooks.on('installation_repositories', async ({ payload }) => {
+    await import('./webhook.js').then(m => m.handleInstallationRepositories({ payload }));
+  });
+
   githubApp.webhooks.on('error', (error) => {
-    console.error(`[Webhook Error] ${error.message}`);
+    logger.error(`[Webhook Error] ${error.message}`, { stack: error.stack });
+  });
+} else if (process.env.NODE_ENV !== 'production') {
+  logger.warn('⚠️ GITHUB_APP_MOCK_MODE: Running with mock githubApp fallback.');
+  
+  const mockWebhooks = new Webhooks({
+    secret: webhookSecret,
+  });
+
+  githubApp = {
+    webhooks: mockWebhooks,
+  };
+
+  // Mock Octokit client for local testing
+  const mockOctokit = {
+    rest: {
+      checks: { 
+        create: async () => ({ data: { id: Date.now() } }), 
+        update: async () => {} 
+      },
+      repos: { 
+        createStatus: async () => {},
+        getCollaboratorPermissionLevel: async () => ({ data: { permission: 'admin' } }),
+        getCommit: async () => ({ 
+          data: { 
+            commit: { message: 'Mock AI Commit' }, 
+            files: [{ filename: 'test.js', patch: '@@ -1,1 +1,1 @@\n-old\n+new', additions: 1 }] 
+          } 
+        })
+      },
+      issues: { createComment: async () => {} },
+      pulls: { 
+        get: async (params) => {
+          if (params.mediaType?.format === 'diff') {
+            return { data: 'diff --git a/test.js b/test.js\n--- a/test.js\n+++ b/test.js\n@@ -1,1 +1,1 @@\n-old\n+new' };
+          }
+          return { data: { head: { sha: 'mock-sha' }, base: { sha: 'base-sha' } } };
+        },
+        listCommits: async () => ({ 
+          data: [{ sha: 'mock-sha' }] 
+        })
+      }
+    }
+  };
+
+  // Event Subscriptions (Mock mode)
+  mockWebhooks.on('pull_request', async ({ payload }) => {
+    await handlePullRequest({ octokit: mockOctokit, payload });
+  });
+
+  mockWebhooks.on('issue_comment', async ({ payload }) => {
+    await handleIssueComment({ octokit: mockOctokit, payload });
+  });
+
+  mockWebhooks.on('installation', async ({ payload }) => {
+    await import('./webhook.js').then(m => m.handleInstallation({ payload }));
+  });
+
+  mockWebhooks.on('installation_repositories', async ({ payload }) => {
+    await import('./webhook.js').then(m => m.handleInstallationRepositories({ payload }));
   });
 }
 
 // Middleware
-app.use(morgan('dev'));
+app.use(morgan('combined', { 
+  stream: { write: message => logger.info(message.trim(), { service: 'morgan' }) } 
+}));
 app.use(bodyParser.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
@@ -141,7 +224,7 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
             });
           }
         } catch (ghErr) {
-          console.error(`[Slack] Failed to update GitHub status:`, ghErr.message);
+          logger.error(`[Slack] Failed to update GitHub status: ${ghErr.message}`);
         }
       }
 
@@ -161,7 +244,7 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
 
     res.status(200).send();
   } catch (error) {
-    console.error(`[Slack Interaction Error] ${error.message}`);
+    logger.error(`[Slack Interaction Error] ${error.message}`, { stack: error.stack });
     res.status(500).send('Internal Server Error');
   }
 });
@@ -185,29 +268,29 @@ app.post('/webhook', async (req, res) => {
       id,
       name,
       signature,
-      payload: req.body
+      payload: req.rawBody || JSON.stringify(req.body)
     });
 
     res.status(200).send('Accepted');
   } catch (error) {
-    console.error(`[Webhook Error] ${error.message}`);
+    logger.error(`[Webhook Error] ${error.message}`);
     res.status(401).send('Unauthorized');
   }
 });
 
 // Start Server
 app.listen(port, async () => {
-  console.log('---------------------------------------------------------');
-  console.log(`MergeBrief Webhook Service is live!`);
-  console.log(`Listening on port: ${port}`);
-  console.log(`Webhook endpoint: http://localhost:${port}/webhook`);
-  console.log('---------------------------------------------------------');
+  logger.info('---------------------------------------------------------');
+  logger.info(`MergeBrief Webhook Service is live!`);
+  logger.info(`Listening on port: ${port}`);
+  logger.info(`Webhook endpoint: http://localhost:${port}/webhook`);
+  logger.info('---------------------------------------------------------');
 
   if (githubApp) {
     try {
       await recoverJobs(githubApp);
     } catch (error) {
-      console.error(`[Startup] Failed to recover jobs:`, error.message);
+      logger.error(`[Startup] Failed to recover jobs: ${error.message}`);
     }
   }
 });

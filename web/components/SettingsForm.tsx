@@ -36,6 +36,25 @@ export default function SettingsForm({ initialWorkspace }: { initialWorkspace: W
     }
   };
 
+  const handleRevoke = async () => {
+    if (!confirm('Are you sure you want to revoke GitHub access? This will stop all AI provenance tracking.')) {
+      return;
+    }
+
+    setStatus('saving');
+    try {
+      const res = await fetch('/api/settings', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to revoke access');
+      
+      setStatus('success');
+      setMessage('GitHub access revoked successfully.');
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err: any) {
+      setStatus('error');
+      setMessage(err.message);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       <div className="glass-card p-8 space-y-8 border-white/5 relative overflow-hidden group">
@@ -128,7 +147,11 @@ export default function SettingsForm({ initialWorkspace }: { initialWorkspace: W
             <p className="font-bold text-sm">Disconnect GitHub Installation</p>
             <p className="text-xs text-white/40 mt-1 max-w-sm">This will immediately revoke access and stop all AI provenance tracking for this workspace.</p>
           </div>
-          <button className="glass-button border-red-500/20 text-red-400 hover:bg-red-500/10 h-fit py-2.5 px-6 whitespace-nowrap">
+          <button 
+            type="button"
+            onClick={handleRevoke}
+            className="glass-button border-red-500/20 text-red-400 hover:bg-red-500/10 h-fit py-2.5 px-6 whitespace-nowrap"
+          >
             Revoke Access
           </button>
         </div>

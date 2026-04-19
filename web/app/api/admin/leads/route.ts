@@ -5,9 +5,13 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const session = await getServerSession();
 
-  // Basic admin check - for production we should check session.user.role === 'ADMIN'
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // @ts-ignore - role is set in NextAuth session callback
+  if (session.user.role !== 'ADMIN') {
+    return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
   }
 
   try {
