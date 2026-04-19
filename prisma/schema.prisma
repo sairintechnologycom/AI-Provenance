@@ -1,32 +1,32 @@
-datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
-}
-
 generator client {
   provider   = "prisma-client-js"
   engineType = "library"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Organization {
   id           String       @id @default(cuid())
   githubId     String       @unique
   login        String
-  repositories Repository[]
-  workspace    Workspace?   @relation(fields: [workspaceId], references: [id])
   workspaceId  String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id])
+  repositories Repository[]
 }
 
 model Workspace {
-  id               String         @id @default(cuid())
-  name             String
-  slackWebhookUrl  String?
-  organizations    Organization[]
-  users            User[]
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              String         @id @default(cuid())
+  name            String
+  slackWebhookUrl String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organizations   Organization[]
+  users           User[]
 }
 
 model Account {
@@ -42,8 +42,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -57,16 +56,16 @@ model Session {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String?
-  email         String?   @unique
+  email         String?    @unique
   emailVerified DateTime?
   image         String?
-  role          String    @default("MEMBER") // ADMIN, MEMBER
+  role          String     @default("MEMBER")
+  workspaceId   String?
   accounts      Account[]
   sessions      Session[]
   workspace     Workspace? @relation(fields: [workspaceId], references: [id])
-  workspaceId   String?
 }
 
 model VerificationToken {
@@ -78,15 +77,15 @@ model VerificationToken {
 }
 
 model Lead {
-  id           String   @id @default(cuid())
-  name         String
-  email        String
-  company      String
-  role         String
-  teamSize     String
-  interest     String?
-  source       String?
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String
+  role      String
+  teamSize  String
+  interest  String?
+  source    String?
+  createdAt DateTime @default(now())
 }
 
 model AppEvent {
@@ -101,121 +100,104 @@ model Repository {
   githubId       String        @unique
   owner          String
   name           String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
   organizationId String
-  pullRequests   PullRequest[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  pullRequests   PullRequest[]
+  organization   Organization  @relation(fields: [organizationId], references: [id])
 
   @@unique([owner, name])
 }
 
 model PullRequest {
-  id           String     @id @default(cuid())
-  githubId     String     @unique
+  id           String            @id @default(cuid())
+  githubId     String            @unique
   number       Int
-  repository   Repository @relation(fields: [repositoryId], references: [id])
   repositoryId String
-
-  // Review Status
-  status       String  @default("PENDING") // PENDING, APPROVED, REJECTED
+  status       String            @default("PENDING")
   approvalNote String?
-  merged       Boolean @default(false)
-
-  reviewEvents ReviewEvent[]
-  packet       MergeBriefPacket?
+  merged       Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   analysisJobs AnalysisJob[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  packet       MergeBriefPacket?
+  repository   Repository        @relation(fields: [repositoryId], references: [id])
+  reviewEvents ReviewEvent[]
 
   @@unique([repositoryId, number])
 }
 
 model ReviewEvent {
   id            String      @id @default(cuid())
-  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
   pullRequestId String
-  eventType     String // APPROVAL, REJECTION, COMMENT
-  username      String // GitHub username
+  eventType     String
+  username      String
   note          String
   createdAt     DateTime    @default(now())
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
 }
 
 model MergeBriefPacket {
-  id            String      @id @default(cuid())
-  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
-  pullRequestId String      @unique
-
-  status  String @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
-  version Int    @default(1)
-
-  headSha String?
-  baseSha String?
-
-  // Overarching stats
-  summary           String?
-  aiTool            String?
-  confidence        Int?
-  filesChangedCount Int?
-
-  rawPayload String? // JSON context
-
-  tags                PacketRiskTag[]
+  id                  String                     @id @default(cuid())
+  pullRequestId       String                     @unique
+  status              String                     @default("QUEUED")
+  version             Int                        @default(1)
+  headSha             String?
+  baseSha             String?
+  summary             String?
+  aiTool              String?
+  confidence          Int?
+  filesChangedCount   Int?
+  rawPayload          String?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  slackSentAt         DateTime?
+  pullRequest         PullRequest                @relation(fields: [pullRequestId], references: [id])
   intents             PacketIntent[]
-  reviewerSuggestions PacketReviewerSuggestion[]
   provenanceEvidence  PacketProvenanceEvidence[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  slackSentAt DateTime?
+  reviewerSuggestions PacketReviewerSuggestion[]
+  tags                PacketRiskTag[]
 }
 
 model PacketRiskTag {
   id       String           @id @default(cuid())
-  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
   packetId String
-
-  type     String // "DETERMINISTIC" or "INFERRED"
-  category String // e.g. "auth", "infra"
+  type     String
+  category String
   reason   String?
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
 model PacketIntent {
   id       String           @id @default(cuid())
-  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
   packetId String
-
-  detail String // E.g. "Refactoring auth module"
+  detail   String
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
 model PacketReviewerSuggestion {
   id       String           @id @default(cuid())
-  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
   packetId String
-
   username String
-  reason   String? // Based on which files or CODEOWNERS rules
+  reason   String?
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
 model PacketProvenanceEvidence {
-  id       String           @id @default(cuid())
-  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
-  packetId String
-
+  id         String           @id @default(cuid())
+  packetId   String
   file       String?
-  method     String // e.g., "trailer", "heuristic"
+  method     String
   confidence Int?
+  packet     MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
 model AnalysisJob {
   id            String      @id @default(cuid())
-  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
   pullRequestId String
-
-  status      String  @default("QUEUED") // QUEUED, PROCESSING, COMPLETED, FAILED
-  errorDetail String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status        String      @default("QUEUED")
+  errorDetail   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id])
 }

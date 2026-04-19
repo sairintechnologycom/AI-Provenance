@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { App } from '@octokit/app';
 import { handlePullRequest, handleIssueComment } from './webhook.js';
 import apiRouter from './api.js';
+import { prisma } from './db.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -68,37 +69,54 @@ app.use('/api', apiRouter);
 // Slack Interactivity
 app.post('/api/slack/interact', async (req, res) => {
   try {
-    const payload = JSON.parse(req.body.payload);
+    const rawPayload = req.body.payload;
+    if (!rawPayload) return res.status(400).send('Missing payload');
+
+    const payload = JSON.parse(rawPayload);
     const { action_id, value } = payload.actions[0];
 
     if (action_id === 'approve_pr') {
       const { packetId, prNumber, owner, repo } = JSON.parse(value);
-      const username = payload.user.username;
+      const username = payload.user.name || payload.user.username;
 
       console.log(`[Slack] Approval received for PR #${prNumber} from @${username}`);
 
-      if (prisma) {
-        const updatedPr = await prisma.pullRequest.update({
-          where: { repositoryId_number: { 
-            repositoryId: (await prisma.repository.findUnique({ where: { owner_name: { owner, name: repo } } })).id,
-            number: prNumber 
-          } },
-          data: {
-            status: "APPROVED",
-            approvalNote: `Approved via Slack by @${username}`
-          }
-        });
-
-        // Log event
-        await prisma.appEvent.create({
-          data: {
-            event: 'slack_approved',
-            payload: { prNumber, username, packetId }
-          }
-        });
+      if (!prisma) {
+        throw new Error('Database client not initialized');
       }
 
-      // Respond to Slack to update the message or just acknowledge
+      // Find the repository first
+      const repository = await prisma.repository.findUnique({
+        where: { owner_name: { owner, name: repo } }
+      });
+
+      if (!repository) {
+        console.error(`[Slack] Repository not found: ${owner}/${repo}`);
+        return res.status(404).send('Repository not found');
+      }
+
+      // Update PR status
+      await prisma.pullRequest.update({
+        where: { 
+          repositoryId_number: { 
+            repositoryId: repository.id,
+            number: prNumber 
+          } 
+        },
+        data: {
+          status: "APPROVED",
+          approvalNote: `Approved via Slack by @${username}`
+        }
+      });
+
+      // Log event
+      await prisma.appEvent.create({
+        data: {
+          event: 'slack_approved',
+          payload: { prNumber, username, packetId, repo: `${owner}/${repo}` }
+        }
+      });
+
       return res.status(200).send({
         text: `✅ PR #${prNumber} has been approved by @${username}.`,
         replace_original: false

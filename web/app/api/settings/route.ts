@@ -2,18 +2,18 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request) {
+export async function PATCH(req: Request) {
   const session = await getServerSession();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { name, slackWebhookUrl } = await req.json();
-
   try {
-    // @ts-ignore
+    const { name, slackWebhookUrl } = await req.json();
+
     const user = await prisma.user.findUnique({
+      // @ts-ignore
       where: { id: session.user.id },
       include: { workspace: true }
     });
@@ -26,12 +26,16 @@ export async function POST(req: Request) {
     if (user.workspaceId) {
       workspace = await prisma.workspace.update({
         where: { id: user.workspaceId },
-        data: { name, slackWebhookUrl }
+        data: { 
+          name: name || undefined, 
+          slackWebhookUrl 
+        }
       });
     } else {
+      // Create a default workspace if none exists
       workspace = await prisma.workspace.create({
         data: {
-          name,
+          name: name || "Default Workspace",
           slackWebhookUrl,
           users: { connect: { id: user.id } }
         }
@@ -41,6 +45,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, workspace });
   } catch (error: any) {
     console.error("[Settings API Error]", error.message);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update settings" }, { status: 500 });
   }
 }
