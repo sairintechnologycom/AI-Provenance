@@ -1,6 +1,6 @@
 /**
  * Asynchronous job queue for processing PRs without blocking webhooks.
- * Lightweight in-memory implementation for Phase 1.
+ * DB-backed implementation for reliability and recovery.
  */
 
 import { analyzeCommitData } from '../core/detect.js';
@@ -19,13 +19,71 @@ let isProcessing = false;
 /**
  * Queues a PR for analysis
  */
-export function queueJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId }) {
+export function queueJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId }) {
   queue.push({
-    octokit, payload, repoRecord, prRecord, checkRunId, packetId, addedAt: Date.now()
+    octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId, addedAt: Date.now()
   });
   
   if (!isProcessing) {
     processNext();
+  }
+}
+
+/**
+ * Recovers stuck jobs from the database on startup.
+ */
+export async function recoverJobs(octokitApp) {
+  if (!prisma) return;
+
+  console.log('[AsyncQueue] Checking for jobs to recover...');
+  
+  const stuckJobs = await prisma.analysisJob.findMany({
+    where: {
+      status: { in: ['QUEUED', 'PROCESSING'] }
+    },
+    include: {
+      pullRequest: {
+        include: {
+          repository: true
+        }
+      }
+    }
+  });
+
+  if (stuckJobs.length === 0) {
+    console.log('[AsyncQueue] No stuck jobs found.');
+    return;
+  }
+
+  console.log(`[AsyncQueue] Recovering ${stuckJobs.length} stuck jobs...`);
+
+  for (const job of stuckJobs) {
+    try {
+      const { pullRequest, payload, checkRunId, packetId } = job;
+      const { repository } = pullRequest;
+
+      // We need an octokit instance for this installation
+      // The payload should have installation.id
+      const installationId = payload?.installation?.id;
+      if (!installationId) {
+        console.error(`[AsyncQueue] Cannot recover job ${job.id}: missing installation.id in payload`);
+        continue;
+      }
+
+      const octokit = await octokitApp.getInstallationOctokit(installationId);
+
+      queueJob({
+        octokit,
+        payload,
+        repoRecord: repository,
+        prRecord: pullRequest,
+        checkRunId: checkRunId ? parseInt(checkRunId) : null,
+        packetId,
+        jobId: job.id
+      });
+    } catch (error) {
+      console.error(`[AsyncQueue] Failed to recover job ${job.id}:`, error.message);
+    }
   }
 }
 
@@ -62,6 +120,16 @@ async function processNext() {
           where: { id: jobParams.packetId },
           data: { status: 'FAILED' }
         });
+
+        if (jobParams.jobId) {
+          await prisma.analysisJob.update({
+            where: { id: jobParams.jobId },
+            data: { 
+              status: 'FAILED',
+              errorDetail: error.message
+            }
+          });
+        }
       }
     } catch (e) {
       console.error('[AsyncQueue] Could not report failure state:', e);
@@ -78,7 +146,7 @@ async function processNext() {
   setTimeout(processNext, 500);
 }
 
-async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId }) {
+async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId }) {
   const { repository, pull_request } = payload;
   const owner = repository.owner.login;
   const repo = repository.name;
@@ -98,6 +166,13 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       where: { id: packetId },
       data: { status: 'PROCESSING' }
     });
+
+    if (jobId) {
+      await prisma.analysisJob.update({
+        where: { id: jobId },
+        data: { status: 'PROCESSING' }
+      });
+    }
   }
 
   // 2. Fetch Commits
@@ -154,12 +229,25 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
 
   const diffChunk = fullPrDiff.split('\n').slice(0, MAX_DIFF_LINES).join('\n');
   
-  if (analysisResults.length > 0 || totalAdditions > 0) {
-     semanticAnalysis = await analyzeDiffIntent(diffChunk, analysisResults);
-  }
-
-  // 4. Deterministic Tags
+  // Tiered Analysis Optimization
+  const maxConfidence = Math.max(...analysisResults.map(r => r.confidence), 0);
+  const isHighConfidenceTrailer = analysisResults.some(r => r.methods.includes('trailer'));
   const deterministicTags = evaluateDeterministicRisks(allTouchedFiles);
+  const isHighRisk = deterministicTags.length > 0;
+  
+  const skipLLM = isHighConfidenceTrailer && !isHighRisk && process.env.FORCE_LLM !== 'true';
+
+  if (!skipLLM && (analysisResults.length > 0 || totalAdditions > 0)) {
+     console.log(`[AsyncQueue] Running LLM semantic analysis for PR #${pull_number}...`);
+     semanticAnalysis = await analyzeDiffIntent(diffChunk, analysisResults);
+  } else if (skipLLM) {
+     console.log(`[AsyncQueue] Skipping LLM analysis for PR #${pull_number} (High confidence trailer + Low risk).`);
+     semanticAnalysis = {
+       intents: ['AI-generated changes (Confirmed by commit trailer)'],
+       blastRadius: ['Low risk areas'],
+       highRiskFiles: []
+     };
+  }
 
   // 5. Reviewers
   const codeownersRef = await fetchCodeOwners(octokit, owner, repo);
@@ -211,6 +299,13 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
         confidence: builtPacket.confidence
       }
     });
+
+    if (jobId) {
+      await prisma.analysisJob.update({
+        where: { id: jobId },
+        data: { status: 'COMPLETED' }
+      });
+    }
   }
 
   // 8. Output to GitHub Check

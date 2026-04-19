@@ -195,7 +195,10 @@ model PacketProvenanceEvidence {
 model AnalysisJob {
   id            String      @id @default(cuid())
   pullRequestId String
+  packetId      String?
+  checkRunId    String?
   status        String      @default("QUEUED")
+  payload       Json?
   errorDetail   String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt

@@ -88,6 +88,21 @@ export async function handlePullRequest({ octokit, payload }) {
     });
 
     if (checkRun) {
+      let jobId = 'temp_job_' + Date.now();
+      
+      if (prisma) {
+        const job = await prisma.analysisJob.create({
+          data: {
+            pullRequestId: prRecord.id,
+            packetId: dbPacket.id,
+            checkRunId: String(checkRun.id),
+            status: 'QUEUED',
+            payload: payload // Store full payload for recovery
+          }
+        });
+        jobId = job.id;
+      }
+
       // Fire async to the queue to not timeout the webhook
       queueJob({
         octokit,
@@ -95,7 +110,8 @@ export async function handlePullRequest({ octokit, payload }) {
         repoRecord: dbRepo,
         prRecord,
         checkRunId: checkRun.id,
-        packetId: dbPacket.id
+        packetId: dbPacket.id,
+        jobId
       });
     }
 
@@ -122,7 +138,13 @@ export async function handleIssueComment({ octokit, payload }) {
   const owner = repository.owner.login;
   const repo = repository.name;
   const username = comment.user.login;
+  const isBot = comment.user.type === 'Bot';
   const reason = commentText.replace('/merge-brief-approve:', '').trim();
+
+  if (isBot) {
+    console.warn(`[Webhook] Approval command ignored from bot account: @${username}`);
+    return;
+  }
 
   if (!reason) {
     await octokit.rest.issues.createComment({
@@ -135,20 +157,20 @@ export async function handleIssueComment({ octokit, payload }) {
   }
 
   try {
-    // 1. Check permissions
+    // 1. Check permissions (Strict: Admin or Maintainer only for AI-assisted code)
     const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
       owner,
       repo,
       username
     });
 
-    const isAuthorized = ['admin', 'write'].includes(permission.permission);
+    const isAuthorized = ['admin', 'maintainer'].includes(permission.permission);
     if (!isAuthorized) {
       await octokit.rest.issues.createComment({
         owner,
         repo,
         issue_number: issue.number,
-        body: `❌ **MergeBrief Denied:** You (@${username}) don't have write access to this repo.`
+        body: `❌ **MergeBrief Denied:** @${username}, you don't have sufficient privileges (Admin/Maintainer) to approve AI-assisted code.`
       });
       return;
     }

@@ -6,12 +6,14 @@ import { App } from '@octokit/app';
 import { handlePullRequest, handleIssueComment } from './webhook.js';
 import apiRouter from './api.js';
 import { prisma } from './db.js';
+import { verifySlackSignature } from './auth-utils.js';
+import { recoverJobs } from './queue.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Verify required environment variables
-const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'ANTHROPIC_API_KEY'];
+const requiredEnv = ['APP_ID', 'PRIVATE_KEY', 'WEBHOOK_SECRET', 'ANTHROPIC_API_KEY', 'SLACK_SIGNING_SECRET'];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
 
 if (missingEnv.length > 0) {
@@ -47,7 +49,11 @@ if (process.env.APP_ID && process.env.PRIVATE_KEY) {
 
 // Middleware
 app.use(morgan('dev'));
-app.use(bodyParser.json());
+app.use(bodyParser.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -62,12 +68,11 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
-
 // APIs
 app.use('/api', apiRouter);
 
 // Slack Interactivity
-app.post('/api/slack/interact', async (req, res) => {
+app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
   try {
     const rawPayload = req.body.payload;
     if (!rawPayload) return res.status(400).send('Missing payload');
@@ -160,10 +165,18 @@ app.post('/webhook', async (req, res) => {
 });
 
 // Start Server
-app.listen(port, () => {
+app.listen(port, async () => {
   console.log('---------------------------------------------------------');
   console.log(`MergeBrief Webhook Service is live!`);
   console.log(`Listening on port: ${port}`);
   console.log(`Webhook endpoint: http://localhost:${port}/webhook`);
   console.log('---------------------------------------------------------');
+
+  if (githubApp) {
+    try {
+      await recoverJobs(githubApp);
+    } catch (error) {
+      console.error(`[Startup] Failed to recover jobs:`, error.message);
+    }
+  }
 });
