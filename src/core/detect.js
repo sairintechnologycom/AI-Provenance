@@ -57,14 +57,8 @@ export const SEMANTIC_FINGERPRINTS = [
 
 /**
  * Platform-agnostic commit analyzer
- * @param {Object} data 
- * @param {string} data.sha
- * @param {string} data.message
- * @param {string} data.diff
- * @param {string|Array} data.files - Either numstat string or array of file objects {additions, deletions}
- * @param {string} data.trailerKey
  */
-export function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-generated-by' }) {
+const internalAnalyzeCommitData = ({ sha, message, diff, files, trailerKey = 'AI-generated-by' }) => {
   let aiTool = null;
   let confidence = 0;
   const methods = [];
@@ -145,9 +139,15 @@ export function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-
     linesRemoved,
     methods
   };
-}
+};
 
-export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
+export const analyzeCommitData = internalAnalyzeCommitData;
+
+export const analyzeCommit = async (repoPath, commitSha, trailerKey = 'AI-generated-by') => {
+  if (typeof internalAnalyzeCommitData !== 'function') {
+    throw new Error(`CRITICAL: internalAnalyzeCommitData is not a function! Type: ${typeof internalAnalyzeCommitData}`);
+  }
+
   // 0. Check for shallow clone
   const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
   if (isShallowStr === 'true') {
@@ -160,13 +160,14 @@ export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-genera
   const numstat = await getGitOutput(repoPath, ['show', '--numstat', '--format=', commitSha]);
 
   // 2. Analyze using the core data processor
-  return analyzeCommitData({
+  return internalAnalyzeCommitData({
     sha: commitSha,
     message,
     diff,
     files: numstat,
     trailerKey
   });
-}
+};
+
 
 
