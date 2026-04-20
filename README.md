@@ -16,6 +16,18 @@ MergeBrief adapts to your engineering workflow with four flexible levels of inte
 
 ---
 
+## ⚡ Quick Start (Interactive Demo)
+
+Experience MergeBrief in 60 seconds without any configuration:
+
+1. **Setup**: `npm install && npx prisma migrate dev`
+2. **Launch Demo**: `npm run demo`
+3. **Explore**: Open [http://localhost:3001/?demo=true](http://localhost:3001/?demo=true)
+
+For a step-by-step walkthrough of the features, see the [**Guided Tour**](docs/GUIDED_TOUR.md).
+
+---
+
 ## 🛠️ Usage Guides
 
 ### 1. GitHub Action (Simple)

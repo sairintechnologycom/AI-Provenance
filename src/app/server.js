@@ -21,7 +21,6 @@ const requiredEnv = [
   'PRIVATE_KEY', 
   'WEBHOOK_SECRET', 
   'ANTHROPIC_API_KEY', 
-  'SLACK_SIGNING_SECRET',
   'DATABASE_URL'
 ];
 const missingEnv = requiredEnv.filter(key => !process.env[key]);
@@ -65,7 +64,7 @@ if (process.env.APP_ID && process.env.PRIVATE_KEY) {
     await import('./webhook.js').then(m => m.handleInstallationRepositories({ payload }));
   });
 
-  githubApp.webhooks.on('error', (error) => {
+  githubApp.webhooks.onError((error) => {
     logger.error(`[Webhook Error] ${error.message}`, { stack: error.stack });
   });
 } else if (process.env.NODE_ENV !== 'production') {
@@ -284,6 +283,7 @@ app.listen(port, async () => {
   logger.info(`MergeBrief Webhook Service is live!`);
   logger.info(`Listening on port: ${port}`);
   logger.info(`Webhook endpoint: http://localhost:${port}/webhook`);
+  logger.info(`Auth Client ID: ${process.env.GITHUB_ID ? process.env.GITHUB_ID.substring(0, 5) + '...' : 'MISSING'}`);
   logger.info('---------------------------------------------------------');
 
   if (githubApp) {

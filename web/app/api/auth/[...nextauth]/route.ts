@@ -9,8 +9,22 @@ const handler = NextAuth({
     GithubProvider({
       clientId: process.env.GITHUB_ID ?? "",
       clientSecret: process.env.GITHUB_SECRET ?? "",
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
+  logger: {
+    error(code, metadata) {
+      console.error(`[NextAuth Error] ${code}`, metadata);
+    },
+    warn(code) {
+      console.warn(`[NextAuth Warn] ${code}`);
+    },
+    debug(code, metadata) {
+      if (code === 'GET_AUTHORIZATION_URL') {
+        console.log(`[NextAuth Debug] Auth URL generated with Client ID: ${process.env.GITHUB_ID?.substring(0, 5)}...`);
+      }
+    }
+  },
   callbacks: {
     async session({ session, user }) {
       if (session.user) {

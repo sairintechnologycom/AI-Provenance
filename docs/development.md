@@ -66,15 +66,16 @@ docker-compose up -d
 
 ## 3. GitHub App Configuration
 
-1. **Webhook URL**: Set to `https://your-domain.com/webhook`.
-2. **Permissions**:
-   - `Pull Requests`: Read & Write (for comments and diffs).
-   - `Issue Comments`: Read & Write (for commands).
-   - `Checks`: Read & Write (Required for MergeBrief Packets Check Runs).
-3. **Events**:
-   - `Pull request`
-   - `Issue comment`
-   - `Check run`
+1. **Webhook URL**: Set to `https://your-domain.com/webhook` (Under the "General" section).
+2. **User authorization callback URL**: Set to `http://localhost:3001/api/auth/callback/github` (Under the "Identifying and authorizing users" section in General tab). This is required for login.
+3. **Permissions**:
+    - `Pull Requests`: Read & Write (for comments and diffs).
+    - `Issue Comments`: Read & Write (for commands).
+    - `Checks`: Read & Write (Required for MergeBrief Packets Check Runs).
+4. **Events**:
+    - `Pull request`
+    - `Issue comment`
+    - `Check run`
 
 ---
 
