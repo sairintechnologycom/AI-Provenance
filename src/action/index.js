@@ -1,6 +1,6 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
-const { analyzeCommit } = require('../core/detect');
+import * as core from '@actions/core';
+import * as github from '@actions/github';
+import { analyzeCommit } from '../core/detect.js';
 
 async function run() {
   try {
