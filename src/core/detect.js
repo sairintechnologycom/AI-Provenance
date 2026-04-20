@@ -18,28 +18,6 @@ export async function getGitOutput(repoPath, args) {
   }
 }
 
-export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
-  // 0. Check for shallow clone
-  const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
-  if (isShallowStr === 'true') {
-    throw new Error('Shallow repository checkout detected. Please set fetch-depth: 0 in your checkout step.');
-  }
-
-  // 1. Fetch data via git
-  const message = await getGitOutput(repoPath, ['show', '-s', '--format=%B', commitSha]);
-  const diff = await getGitOutput(repoPath, ['show', commitSha]);
-  const numstat = await getGitOutput(repoPath, ['show', '--numstat', '--format=', commitSha]);
-
-  // 2. Analyze using the core data processor
-  return analyzeCommitData({
-    sha: commitSha,
-    message,
-    diff,
-    files: numstat,
-    trailerKey
-  });
-}
-
 /**
  * Semantic fingerprints of AI-generated code patterns.
  * These are "weak signals" that, when combined, increase confidence.
@@ -168,3 +146,27 @@ export function analyzeCommitData({ sha, message, diff, files, trailerKey = 'AI-
     methods
   };
 }
+
+export async function analyzeCommit(repoPath, commitSha, trailerKey = 'AI-generated-by') {
+  // 0. Check for shallow clone
+  const isShallowStr = await getGitOutput(repoPath, ['rev-parse', '--is-shallow-repository']);
+  if (isShallowStr === 'true') {
+    throw new Error('Shallow repository checkout detected. Please set fetch-depth: 0 in your checkout step.');
+  }
+
+  // 1. Fetch data via git
+  const message = await getGitOutput(repoPath, ['show', '-s', '--format=%B', commitSha]);
+  const diff = await getGitOutput(repoPath, ['show', commitSha]);
+  const numstat = await getGitOutput(repoPath, ['show', '--numstat', '--format=', commitSha]);
+
+  // 2. Analyze using the core data processor
+  return analyzeCommitData({
+    sha: commitSha,
+    message,
+    diff,
+    files: numstat,
+    trailerKey
+  });
+}
+
+
