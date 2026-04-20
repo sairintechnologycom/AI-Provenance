@@ -1,6 +1,7 @@
 import './globals.css';
 import SessionProvider from '../components/SessionProvider';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import Link from 'next/link';
 
 export const metadata = {
@@ -13,7 +14,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   return (
     <html lang="en" className="dark">
