@@ -11,9 +11,14 @@ import { prisma } from './db.js';
 import { verifySlackSignature } from './auth-utils.js';
 import { recoverJobs } from './queue.js';
 import { updateStatusCheck } from '../core/status.js';
+import cors from 'cors';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 // Verify required environment variables
 const requiredEnv = [
@@ -132,6 +137,12 @@ if (process.env.APP_ID && process.env.PRIVATE_KEY) {
 app.use(morgan('combined', { 
   stream: { write: message => logger.info(message.trim(), { service: 'morgan' }) } 
 }));
+
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+}));
+
 app.use(bodyParser.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();

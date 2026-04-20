@@ -17,9 +17,10 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Copy only node_modules and src from builder
+# Copy built assets and dependencies
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
 # Environment defaults
