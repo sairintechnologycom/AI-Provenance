@@ -13,7 +13,7 @@ export default async function PacketDetail({ params }: { params: { id: string } 
         <div className="text-4xl">🔎</div>
         <h2 className="text-2xl font-bold text-white">Analysis in Progress</h2>
         <p className="text-white/40">This packet is being synthesized. Please refresh in a moment.</p>
-        <Link href="/" className="glass-button inline-flex mt-4">Return to Dashboard</Link>
+        <Link href="/dashboard" className="glass-button inline-flex mt-4">Return to Dashboard</Link>
       </div>
     );
   }
@@ -27,7 +27,7 @@ export default async function PacketDetail({ params }: { params: { id: string } 
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/5">
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-sm font-medium text-white/40">
-            <Link href="/" className="hover:text-primary transition-colors">Dashboard</Link>
+            <Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link>
             <span>/</span>
             <Link href={`/${repo.owner}/${repo.name}`} className="hover:text-primary transition-colors">{repo.owner}/{repo.name}</Link>
           </div>
@@ -249,4 +249,3 @@ export default async function PacketDetail({ params }: { params: { id: string } 
     </div>
   );
 }
-

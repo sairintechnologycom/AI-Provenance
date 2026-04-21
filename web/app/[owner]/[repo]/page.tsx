@@ -21,7 +21,7 @@ export default async function RepoPullRequests({ params }: { params: { owner: st
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/5">
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-sm font-medium text-white/40">
-            <Link href="/" className="hover:text-primary transition-colors">Dashboard</Link>
+            <Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link>
             <span>/</span>
             <span>{params.owner}</span>
             <span>/</span>

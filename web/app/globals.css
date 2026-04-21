@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --background: #050810;
+  --background: #09101d;
   --foreground: #ffffff;
   --primary: #3b82f6;
   --primary-glow: rgba(59, 130, 246, 0.3);
@@ -34,7 +34,9 @@
   }
 
   .premium-gradient-bg {
-    background: radial-gradient(circle at 50% -20%, #1e293b 0%, #050810 80%);
+    background:
+      radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 32%),
+      linear-gradient(180deg, #0b1324 0%, #09101d 48%, #070c15 100%);
   }
 }
 
@@ -50,4 +52,3 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
 }
-

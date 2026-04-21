@@ -5,8 +5,8 @@ import { authOptions } from '@/lib/auth';
 import Link from 'next/link';
 
 export const metadata = {
-  title: 'MergeBrief | AI Provenance & Governance',
-  description: 'Detect, assess, and govern AI-generated code with human accountability.',
+  title: 'MergeBrief | AI Code Governance for Pull Requests',
+  description: 'Detect likely AI-written code, focus review on risky changes, and record human approval with rationale.',
 };
 
 export default async function RootLayout({
@@ -20,18 +20,23 @@ export default async function RootLayout({
     <html lang="en" className="dark">
       <body className="antialiased min-h-screen premium-gradient-bg">
         <SessionProvider>
-          <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/60 backdrop-blur-xl">
+          <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-background/85 backdrop-blur-xl">
             <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
               <Link href="/" className="flex items-center gap-3 group">
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold text-xl shadow-[0_0_15px_rgba(59,130,246,0.5)] group-hover:scale-110 transition-transform">
+                <div className="flex h-8 w-8 items-center justify-center border border-primary/40 bg-primary/15 text-sm font-semibold text-primary transition-colors group-hover:bg-primary/20">
                   M
                 </div>
-                <h1 className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-                  MergeBrief
-                </h1>
+                <div className="flex flex-col leading-none">
+                  <h1 className="text-base font-semibold tracking-tight text-white">
+                    MergeBrief
+                  </h1>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">
+                    AI Code Governance
+                  </p>
+                </div>
               </Link>
 
-              <nav className="flex items-center gap-6">
+              <nav className="flex items-center gap-5">
                 {session?.user ? (
                   <>
                     <Link href="/settings" className="text-sm font-medium text-white/60 hover:text-primary transition-colors">
@@ -49,15 +54,28 @@ export default async function RootLayout({
                     </div>
                   </>
                 ) : (
-                  <Link 
-                    href="/api/auth/signin" 
-                    className="glass-button text-sm px-5 py-2 hover:border-primary/50 group"
-                  >
-                    <span>Sign in</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                  </Link>
+                  <>
+                    <Link
+                      href="/dashboard?demo=true"
+                      className="hidden text-sm font-medium text-white/60 transition-colors hover:text-white md:inline-flex"
+                    >
+                      Demo
+                    </Link>
+                    <Link
+                      href="https://github.com/aincloudtools/AI-Provenance#readme"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hidden text-sm font-medium text-white/60 transition-colors hover:text-white md:inline-flex"
+                    >
+                      Docs
+                    </Link>
+                    <Link
+                      href="/api/auth/signin"
+                      className="inline-flex items-center justify-center border border-white/15 px-4 py-2 text-sm font-medium text-white/85 transition hover:border-primary/50 hover:text-white"
+                    >
+                      Sign in
+                    </Link>
+                  </>
                 )}
               </nav>
             </div>
@@ -67,12 +85,15 @@ export default async function RootLayout({
             {children}
           </main>
 
-          <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 text-white/40 text-sm">
-            <p>&copy; {new Date().getFullYear()} MergeBrief AI. All rights reserved.</p>
+          <footer className="max-w-7xl mx-auto flex flex-col gap-6 border-t border-white/5 px-6 py-12 text-sm text-white/40 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-2">
+              <p className="text-white/75">MergeBrief</p>
+              <p>AI provenance, risk review, and approval trails for pull requests.</p>
+            </div>
             <div className="flex gap-8">
-              <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
-              <Link href="https://github.com/aincloudtools/AI-Provenance#readme" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Docs</Link>
+              <Link href="/privacy" className="transition-colors hover:text-white">Privacy</Link>
+              <Link href="/terms" className="transition-colors hover:text-white">Terms</Link>
+              <Link href="https://github.com/aincloudtools/AI-Provenance#readme" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-white">Docs</Link>
             </div>
           </footer>
         </SessionProvider>
@@ -80,4 +101,3 @@ export default async function RootLayout({
     </html>
   );
 }
-
