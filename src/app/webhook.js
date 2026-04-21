@@ -5,6 +5,7 @@ import { createCheckRun } from '../core/checks.js';
 import { updateStatusCheck } from '../core/status.js';
 import { queueJob } from './queue.js';
 import { prisma } from './db.js';
+import { checkSubscription } from '../core/gating.js';
 
 /**
  * Handle pull_request events
@@ -33,6 +34,28 @@ export async function handlePullRequest({ octokit, payload }) {
   }
 
   console.log(`[Webhook] Processing PR #${pull_number} for ${owner}/${repo} (Action: ${action})`);
+  
+  // Gating Check
+  const isPrivate = repository.private;
+  const gate = await checkSubscription({ owner, repo, isPrivate });
+  
+  if (!gate.allowed) {
+    console.log(`[Webhook] Analysis blocked for PR #${pull_number} (${owner}/${repo}): ${gate.reason}`);
+    
+    // Create a failed CheckRun to notify user why analysis stopped
+    await createCheckRun(octokit, {
+      owner,
+      repo,
+      sha: pull_request.head.sha,
+      conclusion: 'action_required',
+      output: {
+        title: 'MergeBrief: Analysis Disabled',
+        summary: gate.message,
+        text: `To enable AI provenance analysis for private repositories, please upgrade your MergeBrief subscription in the dashboard.`
+      }
+    });
+    return;
+  }
 
   try {
     let prRecord = { id: 'temp_' + Date.now(), number: pull_number };

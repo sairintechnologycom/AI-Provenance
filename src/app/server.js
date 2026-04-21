@@ -6,6 +6,7 @@ import { App } from '@octokit/app';
 import { Webhooks } from '@octokit/webhooks';
 import logger from './logger.js';
 import { handlePullRequest, handleIssueComment } from './webhook.js';
+import { checkSubscription } from '../core/gating.js';
 import createApiRouter from './api.js';
 import { prisma } from './db.js';
 import { verifySlackSignature } from './auth-utils.js';

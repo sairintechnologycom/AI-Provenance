@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import SettingsForm from "@/components/SettingsForm";
+import BillingSettings from "@/components/BillingSettings";
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
@@ -14,7 +15,11 @@ export default async function SettingsPage() {
   const user = await prisma.user.findUnique({
     // @ts-ignore
     where: { id: session.user.id },
-    include: { workspace: true }
+    include: { 
+      workspace: {
+        include: { subscription: true }
+      }
+    }
   });
 
   if (!user) {
@@ -30,9 +35,10 @@ export default async function SettingsPage() {
   }
 
   const workspace = user.workspace;
+  const subscription = workspace?.subscription;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-12 animate-fade-in">
+    <div className="max-w-4xl mx-auto space-y-12 animate-fade-in pb-20">
       <div className="relative">
         <div className="absolute -top-24 -left-24 w-96 h-96 bg-primary/20 blur-[100px] rounded-full pointer-events-none" />
         <div className="relative">
@@ -45,6 +51,8 @@ export default async function SettingsPage() {
         </div>
       </div>
 
+      <BillingSettings subscription={subscription} />
+      
       <SettingsForm initialWorkspace={workspace} />
     </div>
   );
