@@ -89,11 +89,136 @@ async function main() {
     }
   });
 
+  // 4b. Create Human-Led PR (#43)
+  const pr43 = await prisma.pullRequest.create({
+    data: {
+      githubId: 'pr-1001',
+      number: 43,
+      repositoryId: repo.id,
+      status: 'APPROVED',
+      approvalNote: 'Verified human logic for the critical race condition fix.'
+    }
+  });
+
+  await prisma.mergeBriefPacket.create({
+    data: {
+      pullRequestId: pr43.id,
+      status: 'COMPLETED',
+      summary: 'Bug fix for connection race condition. This PR is predominantly human-authored with high-confidence manual logic patterns detected.',
+      aiTool: null,
+      confidence: 12,
+      filesChangedCount: 2,
+      headSha: 'b2c3d4e5f6a1',
+      baseSha: 'a1b2c3d4e5f6',
+      tags: {
+        create: [
+          { type: 'DETERMINISTIC', category: 'logic', reason: 'Manual mutex implementation' }
+        ]
+      },
+      intents: {
+        create: [{ detail: 'Fix race condition in connection manager' }]
+      },
+      reviewerSuggestions: {
+        create: [{ username: 'lead-dev-jane', reason: 'Concurrency expert' }]
+      },
+      provenanceEvidence: {
+        create: [{ method: 'heuristic', confidence: 10 }]
+      }
+    }
+  });
+
+  // 4c. Create High-Risk PR (#44)
+  const pr44 = await prisma.pullRequest.create({
+    data: {
+      githubId: 'pr-1002',
+      number: 44,
+      repositoryId: repo.id,
+      status: 'REJECTED',
+      approvalNote: 'Rejected due to insecure infrastructure exposed by AI configuration scaffold.'
+    }
+  });
+
+  await prisma.mergeBriefPacket.create({
+    data: {
+      pullRequestId: pr44.id,
+      status: 'COMPLETED',
+      summary: 'Infrastructure update for staging environment. AI-generated terraform scripts detected with major security misconfigurations.',
+      aiTool: 'Claude 3.5 Sonnet',
+      confidence: 65,
+      filesChangedCount: 8,
+      headSha: 'c3d4e5f6a1b2',
+      baseSha: 'b2c3d4e5f6a1',
+      tags: {
+        create: [
+          { type: 'DETERMINISTIC', category: 'security', reason: 'Public S3 bucket detected' },
+          { type: 'INFERRED', category: 'infra', reason: 'Standard AI boilerplate for AWS' }
+        ]
+      },
+      intents: {
+        create: [{ detail: 'Scale staging to 3 nodes' }]
+      },
+      reviewerSuggestions: {
+        create: [
+          { username: 'security-expert-rob', reason: 'S3 permission review' },
+          { username: 'infra-guru-sam', reason: 'AWS scaling owner' }
+        ]
+      },
+      provenanceEvidence: {
+        create: [
+          { file: 'main.tf', method: 'heuristic', confidence: 70 },
+          { file: 'outputs.tf', method: 'fingerprint:boilerplate-scaffold', confidence: 60 }
+        ]
+      }
+    }
+  });
+
+  // 4d. Create Mixed PR (#45)
+  const pr45 = await prisma.pullRequest.create({
+    data: {
+      githubId: 'pr-1003',
+      number: 45,
+      repositoryId: repo.id,
+      status: 'PENDING'
+    }
+  });
+
+  await prisma.mergeBriefPacket.create({
+    data: {
+      pullRequestId: pr45.id,
+      status: 'COMPLETED',
+      summary: 'Expansion of the analytics service. Contains a mix of human structural changes and AI-generated helper functions.',
+      aiTool: 'Mixed Sources',
+      confidence: 45,
+      filesChangedCount: 5,
+      headSha: 'd4e5f6a1b2c3',
+      baseSha: 'c3d4e5f6a1b2',
+      tags: {
+        create: [
+          { type: 'INFERRED', category: 'analytics', reason: 'Pattern suggests AI helpers' }
+        ]
+      },
+      intents: {
+        create: [
+          { detail: 'Add weekly digest generator' },
+          { detail: 'Refactor analytics event mapper' }
+        ]
+      },
+      reviewerSuggestions: {
+        create: [{ username: 'data-scientist-alice', reason: 'Analytics owner' }]
+      },
+      provenanceEvidence: {
+        create: [
+          { file: 'helpers.js', method: 'heuristic', confidence: 80 },
+          { file: 'service.js', method: 'fingerprint:excessive-jsdoc', confidence: 30 }
+        ]
+      }
+    }
+  });
+
   console.log('✅ Demo data seeded successfully!');
   console.log(`- Workspace ID: ${workspace.id}`);
   console.log(`- Repository: ${repo.owner}/${repo.name}`);
-  console.log(`- PR Number: #${pr.number}`);
-  console.log(`- Packet ID: ${packet.id}`);
+  console.log(`- PRs Seeded: #${pr.number}, #${pr43.number}, #${pr44.number}, #${pr45.number}`);
   console.log('\n🚀 Next Steps:');
   console.log('1. Run `npm run dev:all`');
   console.log('2. Open http://localhost:3001 in your browser');
