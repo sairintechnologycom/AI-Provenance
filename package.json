@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Core detection engine for AI Provenance",
   "main": "src/core/detect.js",
+  "bin": {
+    "mergebrief": "src/cli.js"
+  },
   "scripts": {
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --no-cache",
     "dev:backend": "node src/app/server.js",

@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+web
+.next
+.git
+.env
+.env.local
+dev.db
+tests
+docs
+scratch
+logs
+*.md
+LICENSE
+Dockerfile
+docker-compose.yml
+nix-shell

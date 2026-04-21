@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { analyzeCommit } = require('./core/detect');
+import { analyzeCommit } from './core/detect.js';
 
 async function main() {
   const args = process.argv.slice(2);

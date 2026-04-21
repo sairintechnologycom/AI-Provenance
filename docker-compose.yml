@@ -1,15 +1,53 @@
 version: '3.8'
 
 services:
-  merge-brief:
-    build: .
+  # Managed Database
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-mergebrief}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-mergebrief}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # MergeBrief Backend Service
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
     ports:
       - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mergebrief}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-mergebrief}?schema=public
+      NODE_ENV: production
+      PORT: 3000
     env_file:
       - .env
+    depends_on:
+      - db
+
+  # MergeBrief Dashboard (Optional for self-hosters)
+  dashboard:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
     restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mergebrief}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-mergebrief}?schema=public
+      NODE_ENV: production
+      BACKEND_API_URL: http://backend:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+    env_file:
+      - .env
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
