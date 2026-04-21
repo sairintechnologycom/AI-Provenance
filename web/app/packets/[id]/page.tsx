@@ -219,6 +219,11 @@ export default async function PacketDetail({ params }: { params: { id: string } 
                         style={{ width: `${ev.confidence}%` }}
                       ></div>
                     </div>
+                    {ev.reason && (
+                      <p className="text-[10px] text-white/30 italic mt-1 pl-2 border-l border-white/10">
+                        {ev.reason}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

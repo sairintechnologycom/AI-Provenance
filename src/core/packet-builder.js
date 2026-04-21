@@ -30,7 +30,8 @@ export function buildPacket({
       provenanceEvidence.push({
         method,
         confidence: r.confidence,
-        file: r.file || null // if file-level granularity is present
+        file: r.file || null,
+        reason: r.verificationReason || null
       });
     });
   });

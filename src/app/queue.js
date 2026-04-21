@@ -6,9 +6,11 @@
 import { analyzeCommitData } from '../core/detect.js';
 import { analyzeDiffIntent } from '../core/llm.js';
 import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
-import { evaluateDeterministicRisks } from '../core/risk-engine.js';
+import { evaluateDeterministicRisks, evaluateContentRisks } from '../core/risk-engine.js';
 import { buildPacket } from '../core/packet-builder.js';
 import { updateCheckRun } from '../core/checks.js';
+import { evaluatePolicy } from '../core/policies.js';
+import { verifyAIGeneration } from '../core/llm-verifier.js';
 import { prisma } from './db.js';
 import { sendSlackNotification } from './slack.js';
 import { logAppEvent } from './analytics.js';
@@ -205,6 +207,20 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       trailerKey: process.env.TRAILER_KEY || 'AI-generated-by'
     });
 
+    // Integrated LLM Verification for inferred results
+    if (process.env.ENABLE_LLM_VERIFICATION === 'true' && result.confidence > 0 && result.confidence < 100) {
+      try {
+        const verification = await verifyAIGeneration(fullDiff, result.confidence, result.methods);
+        if (verification.verified) {
+          result.confidence = verification.verifiedConfidence;
+          result.methods.push(`llm-verified:${verification.consensus.toLowerCase()}`);
+          result.verificationReason = verification.reason;
+        }
+      } catch (err) {
+        console.error(`[AsyncQueue] LLM Verification failed for commit ${commit.sha}: ${err.message}`);
+      }
+    }
+
     if (result.aiTool || result.methods.length > 0) {
       analysisResults.push(result);
     }
@@ -229,10 +245,11 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
 
   const diffChunk = fullPrDiff.split('\n').slice(0, MAX_DIFF_LINES).join('\n');
   
-  // Tiered Analysis Optimization
-  const maxConfidence = Math.max(...analysisResults.map(r => r.confidence), 0);
-  const isHighConfidenceTrailer = analysisResults.some(r => r.methods.includes('trailer'));
-  const deterministicTags = evaluateDeterministicRisks(allTouchedFiles);
+  // 4. Risk Engine Evaluation
+  const fileRiskTags = evaluateDeterministicRisks(allTouchedFiles);
+  const contentRiskTags = evaluateContentRisks(diffChunk);
+  const deterministicTags = [...fileRiskTags, ...contentRiskTags];
+  
   const isHighRisk = deterministicTags.length > 0;
   
   const skipLLM = isHighConfidenceTrailer && !isHighRisk && process.env.FORCE_LLM !== 'true';
@@ -308,22 +325,39 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     }
   }
 
-  // 8. Output to GitHub Check
+  // 8. Policy Evaluation
+  const policyResult = evaluatePolicy(builtPacket, commits.flatMap(c => c.files || []), {
+    blockThreshold: parseInt(process.env.POLICY_BLOCK_THRESHOLD || '90'),
+    warnThreshold: parseInt(process.env.POLICY_WARN_THRESHOLD || '50'),
+    strictMode: process.env.POLICY_STRICT_MODE === 'true',
+    criticalPaths: [
+      '**/auth/**', '**/billing/**', '**/security/**', '**/crypto/**',
+      'src/core/gating.js', 'prisma/schema.prisma'
+    ]
+  });
+
+  // 9. Output to GitHub Check
   const appBaseUrl = process.env.BASE_UI_URL || 'http://localhost:3001';
   const packetUrl = `${appBaseUrl}/packets/${packetId}`;
   
   let checkSummary = `### MergeBrief Packet Generated\n\n`;
   checkSummary += `**Packet Status**: COMPLETED\n`;
   checkSummary += `**Confidence**: ${builtPacket.confidence || 0}% AI Evidence\n`;
+  checkSummary += `**Policy Decision**: ${policyResult.action}\n\n`;
+  
+  if (policyResult.reason) {
+    checkSummary += `> ℹ️ **Reason**: ${policyResult.reason}\n\n`;
+  }
+
   if (builtPacket.summary) checkSummary += `\n> ${builtPacket.summary}\n`;
   checkSummary += `\n[🔍 View Full Packet & Risk Details](${packetUrl})`;
 
   await updateCheckRun(octokit, {
     owner, repo, check_run_id: checkRunId,
     status: 'completed',
-    conclusion: (builtPacket.confidence && builtPacket.confidence > 50) ? 'neutral' : 'success',
+    conclusion: policyResult.action === 'BLOCK' ? 'failure' : (policyResult.action === 'WARN' ? 'neutral' : 'success'),
     output: {
-      title: 'MergeBrief Analysis',
+      title: policyResult.action === 'BLOCK' ? 'MergeBrief: Action Required' : 'MergeBrief Analysis',
       summary: checkSummary
     },
     packetUrl

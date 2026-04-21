@@ -193,6 +193,7 @@ model PacketProvenanceEvidence {
   file       String?
   method     String
   confidence Int?
+  reason     String?
   packet     MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 

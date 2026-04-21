@@ -79,3 +79,43 @@ export function evaluateDeterministicRisks(filePaths) {
 
   return results;
 }
+/**
+ * Evaluates the actual content of a diff for AI-specific risks (hallucinations, leaks).
+ * @param {string} diff - The unified diff text.
+ * @returns {Array<{category: string, reason: string}>} Array of risk tags.
+ */
+export function evaluateContentRisks(diff) {
+  const contentRisks = [];
+
+  // 1. AI "Leaks" (Phrases that shouldn't be in production code)
+  const leakPatterns = [
+    {
+      category: 'ai-artifact',
+      pattern: /(as an? ai (language )?model|honest?ly, I (don't|cannot)|here'?s a? (template|suggested|example) (implementation|code))/i,
+      reason: 'AI chat residue/disclaimer detected in code comments or strings.'
+    },
+    {
+      category: 'placeholder',
+      pattern: /(your_api_key_here|insert_.*_here|example\.com\/api|REPLACE_ME)/i,
+      reason: 'Unreplaced AI placeholder or template value detected.'
+    }
+  ];
+
+  for (const risk of leakPatterns) {
+    if (risk.pattern.test(diff)) {
+      contentRisks.push({ category: risk.category, reason: risk.reason });
+    }
+  }
+
+  // 2. Likely Hallucinated Imports
+  // Heuristic: Very long, descriptive, or unusually named libraries that don't exist in major ecosystems.
+  const suspiciousImports = diff.match(/(import|require|from)\s*['"](@?[a-z0-9-]+\/[a-z0-9-]+-implementation-helper|universal-.*-generator-api|mock-database-connector-pro)['"]/gi);
+  if (suspiciousImports) {
+    contentRisks.push({
+      category: 'hallucination',
+      reason: `Potential hallucinated libraries detected: [${suspiciousImports.slice(0, 2).map(i => i.trim()).join(', ')}].`
+    });
+  }
+
+  return contentRisks;
+}
