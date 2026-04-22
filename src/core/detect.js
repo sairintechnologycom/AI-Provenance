@@ -56,7 +56,7 @@ const engine = {
   calculateBoilerplateRatio: (diff) => {
     const keywords = ['Factory', 'Service', 'Controller', 'Manager', 'Repository', 'Interface', 'Adapter', 'Provider'];
     const identifiers = diff.match(/[A-Z][a-zA-Z0-9]{3,}/g) || [];
-    if (identifiers.length === 0) return 0;
+    if (identifiers.length < 3) return 0;
 
     let bpCount = 0;
     for (const id of identifiers) {

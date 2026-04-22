@@ -84,9 +84,7 @@ export function getSuggestedReviewers(highRiskFiles, codeownersContent, reviewer
 
     if (bestMatch) {
       bestMatch.owners.forEach(owner => {
-        // Clean @ if present
-        const cleanName = owner.startsWith('@') ? owner.substring(1) : owner;
-        suggestedReviewers.add(cleanName);
+        suggestedReviewers.add(owner);
       });
     }
   }
@@ -96,8 +94,10 @@ export function getSuggestedReviewers(highRiskFiles, codeownersContent, reviewer
   // Sorting logic for Load Balancer: Lowest Latency First
   if (Object.keys(reviewerStats).length > 0) {
     return reviewers.sort((a, b) => {
-      const latencyA = reviewerStats[a]?.avgLatencySeconds || 999999;
-      const latencyB = reviewerStats[b]?.avgLatencySeconds || 999999;
+      const nameA = a.startsWith('@') ? a.substring(1) : a;
+      const nameB = b.startsWith('@') ? b.substring(1) : b;
+      const latencyA = reviewerStats[nameA]?.avgLatencySeconds || 999999;
+      const latencyB = reviewerStats[nameB]?.avgLatencySeconds || 999999;
       return latencyA - latencyB;
     });
   }
