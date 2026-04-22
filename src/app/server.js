@@ -160,8 +160,16 @@ const webhookLimiter = rateLimit({
 // Apply global rate limiter to all requests
 app.use(globalLimiter);
 
+const allowedOrigin = process.env.NODE_ENV === 'production' 
+  ? process.env.FRONTEND_URL 
+  : (process.env.FRONTEND_URL || '*');
+
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+  logger.warn('⚠️ FRONTEND_URL not set in production. CORS will likely fail for authenticated requests.');
+}
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: allowedOrigin,
   credentials: true
 }));
 
@@ -204,7 +212,13 @@ const verifyInternalKey = (req, res, next) => {
 
   const effectiveSecret = internalSecret || defaultSecret;
 
-  if (apiKey !== effectiveSecret) {
+  const apiKeyBuf = Buffer.from(apiKey);
+  const secretBuf = Buffer.from(effectiveSecret);
+
+  const isMatch = apiKeyBuf.length === secretBuf.length && 
+                  crypto.timingSafeEqual(apiKeyBuf, secretBuf);
+
+  if (!isMatch) {
     return res.status(403).json({ error: 'Invalid Internal API Key' });
   }
 

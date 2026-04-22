@@ -3,7 +3,7 @@ import crypto from 'crypto';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
-const KEY = crypto.scryptSync(process.env.ENCRYPTION_SECRET || 'default-secret-do-not-use-in-prod', 'salt', 32);
+const KEY = crypto.scryptSync(process.env.ENCRYPTION_SECRET || 'default-secret-do-not-use-in-prod', process.env.ENCRYPTION_SALT || 'salt', 32);
 
 export function encrypt(text: string | null | undefined): string | null | undefined {
   if (!text) return text;

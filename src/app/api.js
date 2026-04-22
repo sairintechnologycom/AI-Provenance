@@ -29,12 +29,20 @@ const ApprovalSchema = z.object({
 export default function createApiRouter(githubApp) {
   const router = express.Router();
 
-  /**
-   * Middleware to check if Prisma is available
-   */
   const checkDb = (req, res, next) => {
     if (!prisma) {
       return res.status(503).json({ error: 'Database is currently unavailable' });
+    }
+    next();
+  };
+
+  /**
+   * Middleware to check if user has ADMIN role
+   */
+  const verifyAdmin = (req, res, next) => {
+    const role = req.headers['x-user-role'];
+    if (role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Access Denied: Admin privileges required' });
     }
     next();
   };
@@ -334,7 +342,7 @@ export default function createApiRouter(githubApp) {
    * GET /api/admin/leads
    * Returns list of waitlist signups.
    */
-  router.get('/admin/leads', checkDb, async (req, res) => {
+  router.get('/admin/leads', checkDb, verifyAdmin, async (req, res) => {
     // For now, only internal API key (handled by middleware) is required,
     // but we should eventually add a super-admin role check.
     try {
@@ -351,7 +359,7 @@ export default function createApiRouter(githubApp) {
    * GET /api/admin/events
    * Returns recent system events.
    */
-  router.get('/admin/events', checkDb, async (req, res) => {
+  router.get('/admin/events', checkDb, verifyAdmin, async (req, res) => {
     try {
       const events = await prisma.appEvent.findMany({
         take: 50,

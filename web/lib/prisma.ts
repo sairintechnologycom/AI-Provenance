@@ -25,7 +25,7 @@ export const prisma = basePrisma.$extends({
       async upsert({ args, query }: any) {
         if (args.create.access_token) args.create.access_token = encrypt(args.create.access_token);
         if (args.create.refresh_token) args.create.refresh_token = encrypt(args.create.refresh_token);
-        if (args.update.access_token) args.update.update.access_token = encrypt(args.update.access_token);
+        if (args.update.access_token) args.update.access_token = encrypt(args.update.access_token);
         if (args.update.refresh_token) args.update.refresh_token = encrypt(args.update.refresh_token);
         return query(args);
       }

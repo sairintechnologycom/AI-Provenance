@@ -225,16 +225,18 @@ export async function handleInstallation({ payload }) {
         create: { githubId, login: owner }
       });
 
-      // 2. Auto-link to the first available workspace if not linked
+      // 2. Ensure Workspace exists for the Organization
       if (!dbOrg.workspaceId) {
-        const firstWorkspace = await prisma.workspace.findFirst();
-        if (firstWorkspace) {
-           dbOrg = await prisma.organization.update({
-             where: { id: dbOrg.id },
-             data: { workspaceId: firstWorkspace.id }
-           });
-           console.log(`[Webhook] Auto-linked ${owner} to workspace: ${firstWorkspace.name}`);
-        }
+        const newWorkspace = await prisma.workspace.create({
+          data: {
+            name: `${owner}'s Workspace`,
+          }
+        });
+        dbOrg = await prisma.organization.update({
+          where: { id: dbOrg.id },
+          data: { workspaceId: newWorkspace.id }
+        });
+        console.log(`[Webhook] Created new workspace for ${owner}: ${newWorkspace.name}`);
       }
 
       // 3. Sync repositories if provided
