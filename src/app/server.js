@@ -164,8 +164,24 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// Internal API Security Middleware
+const verifyInternalKey = (req, res, next) => {
+  const apiKey = req.headers['x-api-key'];
+  const internalSecret = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
+  
+  if (!apiKey) {
+    return res.status(401).json({ error: 'Internal API Key required' });
+  }
+
+  if (apiKey !== internalSecret) {
+    return res.status(403).json({ error: 'Invalid Internal API Key' });
+  }
+
+  next();
+};
+
 // APIs
-app.use('/api', createApiRouter(githubApp));
+app.use('/api', verifyInternalKey, createApiRouter(githubApp));
 
 // Slack Interactivity
 app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {

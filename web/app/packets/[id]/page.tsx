@@ -4,6 +4,10 @@ import RiskHeatmap from '@/components/RiskHeatmap';
 import ImpactVisualizer from '@/components/ImpactVisualizer';
 import StyleMetrics from '@/components/StyleMetrics';
 
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+
 export const dynamic = 'force-dynamic';
 
 export default async function PacketDetail({ 
@@ -14,8 +18,22 @@ export default async function PacketDetail({
   searchParams?: { demo?: string }
 }) {
   const isDemo = searchParams?.demo === 'true';
+  const session = await getServerSession(authOptions);
+
+  if (!session && !isDemo) {
+    redirect('/');
+  }
+
   const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
-  const res = await fetch(`${backendUrl}/api/packets/${params.id}`, { cache: 'no-store' });
+  const internalKey = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
+
+  const res = await fetch(`${backendUrl}/api/packets/${params.id}`, { 
+    cache: 'no-store',
+    headers: {
+      'x-api-key': internalKey,
+      'x-workspace-id': (session?.user as any)?.workspaceId || ''
+    }
+  });
   
   if (!res.ok) {
     return (

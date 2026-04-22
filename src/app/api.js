@@ -23,8 +23,12 @@ export default function createApiRouter(githubApp) {
    * Returns list of tracked repositories.
    */
   router.get('/repos', checkDb, async (req, res) => {
+    const workspaceId = req.headers['x-workspace-id'];
     try {
       const repos = await prisma.repository.findMany({
+        where: workspaceId ? {
+          organization: { workspaceId }
+        } : {}, // In non-production/demo, show all if no workspaceId
         include: { organization: true },
         orderBy: { updatedAt: 'desc' }
       });
@@ -123,12 +127,17 @@ export default function createApiRouter(githubApp) {
    * Canonical endpoint for retrieving full packet details.
    */
   router.get('/packets/:id', checkDb, async (req, res) => {
+    const workspaceId = req.headers['x-workspace-id'];
     try {
       const packet = await prisma.mergeBriefPacket.findUnique({
         where: { id: req.params.id },
         include: {
           pullRequest: {
-            include: { repository: true }
+            include: { 
+              repository: {
+                include: { organization: true }
+              } 
+            }
           },
           tags: true,
           intents: true,
@@ -137,9 +146,13 @@ export default function createApiRouter(githubApp) {
           lineRisks: true
         }
       });
-
       if (!packet) {
         return res.status(404).json({ error: 'Packet not found' });
+      }
+
+      // Tenant Isolation Check
+      if (workspaceId && packet.pullRequest.repository.organization.workspaceId !== workspaceId) {
+        return res.status(403).json({ error: 'Access Denied: This packet does not belong to your workspace' });
       }
 
       res.json(packet);
