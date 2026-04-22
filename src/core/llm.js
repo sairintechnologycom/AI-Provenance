@@ -13,6 +13,18 @@ export async function analyzeDiffIntent(diff, provenanceSummary) {
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
+  // Pre-scan for common prompt injection patterns to protect the LLM context
+  const injectionPatterns = /(ignore (all )?previous instructions|you are now|new rule:|system (prompt|message):|forget everything|jailbreak)/i;
+  if (injectionPatterns.test(diff)) {
+    console.error('[LLM] Critical: Potential prompt injection detected in diff content. Aborting analysis.');
+    return {
+      error: 'CRITICAL_SECURITY_RISK',
+      reason: 'Potential prompt injection detected in diff.',
+      blastRadius: ['Security Governance'],
+      highRiskFiles: ['*']
+    };
+  }
+
   const systemPrompt = `
 You are an expert technical lead and security reviewer.
 Analyze the provided git diff and AI provenance analysis results.

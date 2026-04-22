@@ -96,8 +96,13 @@ export function evaluateContentRisks(diff) {
     },
     {
       category: 'placeholder',
-      pattern: /(your_api_key_here|insert_.*_here|example\.com\/api|REPLACE_ME)/i,
+      pattern: /(your_api_key_here|insert_.*_here|example\.com\/api|test\.com\/api|REPLACE_ME|TODO_AI|FIXME_AI)/i,
       reason: 'Unreplaced AI placeholder or template value detected.'
+    },
+    {
+      category: 'prompt-injection',
+      pattern: /(ignore (all )?previous instructions|you are now|new rule:|system (prompt|message):|forget everything)/i,
+      reason: 'Potential prompt injection attempt detected in code diff.'
     }
   ];
 
@@ -167,25 +172,39 @@ export function evaluateLineLevelRisks(diff) {
         });
       }
 
-      // 3. Complexity Spike (Medium Risk)
-      // Heuristic: deep nesting or many operators in a single line
+      // 3. Complexity Spike & Obfuscation (Medium Risk)
       const operators = (content.match(/[&|?<>!=]{2,}|=>/g) || []).length;
-      if (operators > 3 || content.length > 120) {
+      const isBase64 = /[A-Za-z0-9+/]{40,}=*/.test(content);
+      const isLargeData = (content.match(/[,:\[\{]/g) || []).length > 8;
+      
+      if (operators > 3 || content.length > 150 || isBase64 || isLargeData) {
         lineRisks.push({
           file: currentFile,
           line: currentLine,
-          score: 60,
-          reason: 'High logic density (potential hallucination prone).'
+          score: 65,
+          reason: isBase64 ? 'Potential obfuscated binary data.' : 
+                  isLargeData ? 'Unusually large data structure density.' :
+                  'High logic density (complexity spike).'
         });
       }
       
       // 4. Placeholder values
-      if (/(your_api_key_here|insert_.*_here|example\.com\/api|REPLACE_ME)/i.test(content)) {
+      if (/(your_api_key_here|insert_.*_here|example\.com\/api|test\.com\/api|REPLACE_ME|TODO_AI|FIXME_AI)/i.test(content)) {
         lineRisks.push({
           file: currentFile,
           line: currentLine,
           score: 85,
           reason: 'Unreplaced AI placeholder detected.'
+        });
+      }
+
+      // 5. Prompt Injection (Critical)
+      if (/(ignore (all )?previous instructions|you are now|new rule:|system (prompt|message):|forget everything)/i.test(content)) {
+        lineRisks.push({
+          file: currentFile,
+          line: currentLine,
+          score: 100,
+          reason: 'High-confidence Prompt Injection attempt detected.'
         });
       }
     } else if (!line.startsWith('-')) {
