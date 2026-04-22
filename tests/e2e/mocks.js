@@ -104,6 +104,27 @@ export class MockPrisma {
         }
         return Promise.resolve(org);
       }),
+      findFirst: jest.fn().mockImplementation((args = {}) => {
+        const where = args.where || {};
+        const org = this.state.organizations.find(o =>
+          (where.login === undefined || o.login === where.login) &&
+          (where.githubId === undefined || o.githubId === where.githubId)
+        );
+        if (!org) return Promise.resolve(null);
+        return Promise.resolve({ ...org, workspace: null });
+      }),
+      findUnique: jest.fn().mockImplementation(({ where }) => {
+        const org = this.state.organizations.find(o => o.githubId === where.githubId || o.id === where.id);
+        return Promise.resolve(org || null);
+      }),
+      update: jest.fn().mockImplementation(({ where, data }) => {
+        const org = this.state.organizations.find(o => o.id === where.id);
+        if (org) {
+          Object.assign(org, data);
+          this.save();
+        }
+        return Promise.resolve(org);
+      }),
       deleteMany: jest.fn().mockImplementation(() => {
         this.state.organizations = [];
         this.save();
@@ -128,7 +149,12 @@ export class MockPrisma {
       }),
       findUnique: jest.fn().mockImplementation(({ where }) => {
         const repo = this.state.repositories.find(r => r.id === where.id);
-        return Promise.resolve(repo ? { ...repo, organization: { include: { workspace: true } } } : null);
+        if (!repo) return Promise.resolve(null);
+        const org = this.state.organizations.find(o => o.id === repo.organizationId) || null;
+        return Promise.resolve({
+          ...repo,
+          organization: org ? { ...org, workspace: null } : null
+        });
       })
     };
 
@@ -153,7 +179,13 @@ export class MockPrisma {
         return Promise.resolve(null);
       }),
       update: jest.fn().mockImplementation(({ where, data }) => {
-        let pr = this.state.pullRequests.find(p => p.number === where.number);
+        let pr = this.state.pullRequests.find(p =>
+          (where.id !== undefined && p.id === where.id) ||
+          (where.number !== undefined && p.number === where.number) ||
+          (where.repositoryId_number &&
+            p.repositoryId === where.repositoryId_number.repositoryId &&
+            p.number === where.repositoryId_number.number)
+        );
         if (pr) {
           Object.assign(pr, data);
           this.save();
@@ -206,14 +238,31 @@ export class MockPrisma {
         const job = { ...data, id: `job-${Date.now()}` };
         return Promise.resolve(job);
       }),
-      update: jest.fn().mockResolvedValue({ id: 'job-1' })
+      update: jest.fn().mockResolvedValue({ id: 'job-1' }),
+      findMany: jest.fn().mockResolvedValue([])
     };
   }
 
+  reset() {
+    this.state = {
+      organizations: [],
+      repositories: [],
+      pullRequests: [],
+      reviewEvents: []
+    };
+    this.save();
+  }
+
   init() {
-    if (fs.existsSync(DB_STATE_PATH)) {
-      this.state = JSON.parse(fs.readFileSync(DB_STATE_PATH, 'utf8'));
-    }
+    // Start every test run with a clean slate. The on-disk state file
+    // is a debugging artifact, not a source of truth for tests — letting
+    // it leak across runs caused upserts to silently return stale rows.
+    this.state = {
+      organizations: [],
+      repositories: [],
+      pullRequests: [],
+      reviewEvents: []
+    };
   }
 
   save() {

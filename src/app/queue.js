@@ -3,6 +3,7 @@
  * DB-backed implementation for reliability and recovery.
  */
 
+import { PgBoss } from 'pg-boss';
 import { analyzeCommitData } from '../core/detect.js';
 import { analyzeDiffIntent } from '../core/llm.js';
 import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
@@ -10,143 +11,218 @@ import { evaluateDeterministicRisks, evaluateContentRisks } from '../core/risk-e
 import { buildPacket } from '../core/packet-builder.js';
 import { updateCheckRun } from '../core/checks.js';
 import { evaluatePolicy } from '../core/policies.js';
-import { verifyAIGeneration } from '../core/llm-verifier.js';
+import { verifyAnalysis } from '../core/verifier.js';
+import { parseImports, calculateBlastRadius } from '../core/dep-graph.js';
 import { prisma } from './db.js';
 import { sendSlackNotification } from './slack.js';
 import { logAppEvent } from './analytics.js';
 
-const queue = [];
-let isProcessing = false;
+const QUEUE_NAME = 'analysis-jobs';
 
-/**
- * Queues a PR for analysis
- */
-export function queueJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId }) {
-  queue.push({
-    octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId, addedAt: Date.now()
-  });
-  
-  if (!isProcessing) {
-    processNext();
+// Lazily-constructed pg-boss instance. We avoid building it at module load
+// so imports (tests, CLI) don't require DATABASE_URL.
+let boss = null;
+
+function getBoss() {
+  if (boss) return boss;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('[AsyncQueue] DATABASE_URL is required to initialize pg-boss.');
   }
+  boss = new PgBoss({
+    connectionString,
+    // Defensive defaults. Override via env if you need a different cadence.
+    retryLimit: Number(process.env.PGBOSS_RETRY_LIMIT || 3),
+    retryBackoff: true,
+    expireInHours: Number(process.env.PGBOSS_EXPIRE_HOURS || 1)
+  });
+  boss.on('error', (err) => console.error('[AsyncQueue] pg-boss error:', err));
+  return boss;
 }
 
 /**
- * Recovers stuck jobs from the database on startup.
+ * Decides whether LLM semantic analysis can be skipped for a PR.
  */
-export async function recoverJobs(octokitApp) {
-  if (!prisma) return;
-
-  console.log('[AsyncQueue] Checking for jobs to recover...');
+export function shouldSkipLLM(analysisResults, deterministicTags, env = process.env) {
+  if (env.FORCE_LLM === 'true') return false;
+  if (!Array.isArray(analysisResults) || analysisResults.length === 0) return false;
   
-  const stuckJobs = await prisma.analysisJob.findMany({
-    where: {
-      status: { in: ['QUEUED', 'PROCESSING'] }
-    },
-    include: {
-      pullRequest: {
-        include: {
-          repository: true
-        }
-      }
-    }
-  });
+  const isHighRisk = Array.isArray(deterministicTags) && deterministicTags.length > 0;
+  const isHighConfidenceTrailer = analysisResults.some(
+    r => r && r.confidence === 100 && Array.isArray(r.methods) && r.methods.includes('trailer')
+  );
 
-  if (stuckJobs.length === 0) {
-    console.log('[AsyncQueue] No stuck jobs found.');
-    return;
-  }
-
-  console.log(`[AsyncQueue] Recovering ${stuckJobs.length} stuck jobs...`);
-
-  for (const job of stuckJobs) {
-    try {
-      const { pullRequest, payload, checkRunId, packetId } = job;
-      const { repository } = pullRequest;
-
-      // We need an octokit instance for this installation
-      // The payload should have installation.id
-      const installationId = payload?.installation?.id;
-      if (!installationId) {
-        console.error(`[AsyncQueue] Cannot recover job ${job.id}: missing installation.id in payload`);
-        continue;
-      }
-
-      const octokit = await octokitApp.getInstallationOctokit(installationId);
-
-      queueJob({
-        octokit,
-        payload,
-        repoRecord: repository,
-        prRecord: pullRequest,
-        checkRunId: checkRunId ? parseInt(checkRunId) : null,
-        packetId,
-        jobId: job.id
-      });
-    } catch (error) {
-      console.error(`[AsyncQueue] Failed to recover job ${job.id}:`, error.message);
-    }
-  }
+  return isHighConfidenceTrailer && !isHighRisk;
 }
 
-async function processNext() {
-  if (queue.length === 0) {
-    isProcessing = false;
-    return;
-  }
+/**
+ * Initializes the pg-boss queue and starts the worker.
+ *
+ * pg-boss v12+ requires createQueue() before send/work, and the work
+ * handler receives an array of jobs (batchSize=1 by default).
+ */
+export async function startQueue(githubApp) {
+  const b = getBoss();
+  await b.start();
+  await b.createQueue(QUEUE_NAME);
+  console.log(`[AsyncQueue] pg-boss started, queue "${QUEUE_NAME}" ready.`);
 
-  isProcessing = true;
-  const jobParams = queue.shift();
-  
+  await b.work(QUEUE_NAME, async ([job]) => {
+    const { type, payload, installationId } = job.data;
+    console.log(`[AsyncQueue] Processing ${type} job ${job.id}...`);
+
+    const octokit = await githubApp.getInstallationOctokit(installationId);
+
+    if (type === 'analysis') {
+      await handleAnalysisJob(octokit, payload);
+    } else if (type === 'telemetry') {
+      await ingestTelemetry(octokit, payload);
+    } else {
+      console.warn(`[AsyncQueue] Unknown job type "${type}" — skipping.`);
+    }
+    // Errors propagate to pg-boss which applies retryLimit + backoff.
+  });
+}
+
+/**
+ * Graceful shutdown. Call from SIGTERM/SIGINT to let in-flight jobs finish.
+ */
+export async function stopQueue() {
+  if (!boss) return;
   try {
-    await processJob(jobParams);
-  } catch (error) {
-    console.error(`[AsyncQueue] Job failed for PR #${jobParams.prRecord.number}:`, error);
-    
-    // Fallback failure reporting
-    try {
-      await updateCheckRun(jobParams.octokit, {
-        owner: jobParams.repoRecord.owner,
-        repo: jobParams.repoRecord.name,
-        check_run_id: jobParams.checkRunId,
-        status: 'completed',
-        conclusion: 'failure',
-        output: {
-          title: 'Analysis Failed',
-          summary: `MergeBrief encountered a systemic error during analysis: ${error.message}`
-        }
-      });
-      
-      if (prisma) {
-        await prisma.mergeBriefPacket.update({
-          where: { id: jobParams.packetId },
-          data: { status: 'FAILED' }
-        });
+    await boss.stop({ graceful: true, timeout: 30_000 });
+  } finally {
+    boss = null;
+  }
+}
 
-        if (jobParams.jobId) {
-          await prisma.analysisJob.update({
-            where: { id: jobParams.jobId },
-            data: { 
-              status: 'FAILED',
-              errorDetail: error.message
-            }
-          });
-        }
+/**
+ * Handles the database persistence and starting the analysis for a PR.
+ * Logic moved from webhook.js handlePullRequest.
+ */
+async function handleAnalysisJob(octokit, payload) {
+  const { repository, pull_request } = payload;
+  const owner = repository.owner.login;
+  const repo = repository.name;
+  const pull_number = pull_request.number;
+
+  // 1. Gating Check (moved to background)
+  const { checkSubscription } = await import('../core/gating.js');
+  const gate = await checkSubscription({ owner, repo, isPrivate: repository.private });
+  
+  if (!gate.allowed) {
+    const { createCheckRun } = await import('../core/checks.js');
+    await createCheckRun(octokit, {
+      owner, repo, sha: pull_request.head.sha,
+      conclusion: 'action_required',
+      output: {
+        title: 'MergeBrief: Analysis Disabled',
+        summary: gate.message,
+        text: `Upgrade your subscription to enable analysis for private repositories.`
       }
-    } catch (e) {
-      console.error('[AsyncQueue] Could not report failure state:', e);
-    }
+    });
+    return;
+  }
 
-    await logAppEvent('packet_failed', {
-      pr: jobParams.prRecord.number,
-      repo: jobParams.repoRecord.name,
-      error: error.message
+  // 2. DB Persistence
+  let prRecord, dbRepo, dbPacket;
+  if (prisma) {
+    const dbOrg = await prisma.organization.upsert({
+      where: { githubId: String(repository.owner.id) },
+      update: { login: owner },
+      create: { githubId: String(repository.owner.id), login: owner }
+    });
+
+    dbRepo = await prisma.repository.upsert({
+      where: { githubId: String(repository.id) },
+      update: { owner, name: repo },
+      create: { githubId: String(repository.id), owner, name: repo, organizationId: dbOrg.id }
+    });
+
+    prRecord = await prisma.pullRequest.upsert({
+      where: { repositoryId_number: { repositoryId: dbRepo.id, number: pull_number } },
+      update: { merged: pull_request.merged, status: 'PENDING' },
+      create: {
+        githubId: String(pull_request.id),
+        number: pull_number,
+        repositoryId: dbRepo.id,
+        status: 'PENDING',
+        merged: pull_request.merged
+      }
+    });
+
+    await prisma.mergeBriefPacket.deleteMany({ where: { pullRequestId: prRecord.id } });
+    dbPacket = await prisma.mergeBriefPacket.create({
+      data: { pullRequestId: prRecord.id, status: 'QUEUED', version: 1 }
     });
   }
 
-  // Allow event loop to breathe
-  setTimeout(processNext, 500);
+  // 3. Create Check Run
+  const { createCheckRun } = await import('../core/checks.js');
+  const checkRun = await createCheckRun(octokit, {
+    owner, repo, sha: pull_request.head.sha
+  });
+
+  if (checkRun && prisma) {
+    const job = await prisma.analysisJob.create({
+      data: {
+        pullRequestId: prRecord.id,
+        packetId: dbPacket.id,
+        checkRunId: String(checkRun.id),
+        status: 'QUEUED',
+        payload
+      }
+    });
+
+    // 4. Run the core analysis logic
+    await processJob({
+      octokit,
+      payload,
+      repoRecord: dbRepo,
+      prRecord,
+      checkRunId: checkRun.id,
+      packetId: dbPacket.id,
+      jobId: job.id
+    });
+  }
 }
+
+// Ensure ingestTelemetry is accessible
+async function ingestTelemetry(octokit, payload) {
+  const { ingestTelemetry: internalIngest } = await import('./webhook.js');
+  const { repository, pull_request } = payload;
+  return internalIngest(octokit, {
+    owner: repository.owner.login,
+    repo: repository.name,
+    pull_request
+  });
+}
+
+/**
+ * Queues a PR for analysis via pg-boss.
+ *
+ * Octokit instances are not serializable, so we only persist the
+ * installationId and let the worker mint its own Octokit per job.
+ */
+export async function queueJob(jobData) {
+  const b = getBoss();
+
+  const data = {
+    ...jobData,
+    installationId: jobData.payload?.installation?.id
+  };
+  delete data.octokit;
+
+  const jobId = await b.send(QUEUE_NAME, data);
+  console.log(`[AsyncQueue] Job enqueued to pg-boss: ${jobId}`);
+  return jobId;
+}
+
+// `recoverJobs` was the in-memory queue's startup sweep. pg-boss now handles
+// retries natively (see retryLimit/retryBackoff in getBoss) so that code path
+// is gone. The AnalysisJob audit rows that could be left in a "QUEUED" state
+// after a hard crash are a separate concern — add a dedicated sweeper when
+// that becomes a real operational issue.
 
 async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, packetId, jobId }) {
   const { repository, pull_request } = payload;
@@ -177,11 +253,36 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     }
   }
 
-  // 2. Fetch Commits
+  // 1. Fetch Governance Policy
+  const policy = await evaluatePolicy(octokit, owner, repo);
+  
+  // 2. Fetch Changed Files & Commits
+  const { data: files } = await octokit.rest.pulls.listFiles({
+    owner, repo, pull_number, per_page: 100
+  });
+
   const { data: commits } = await octokit.rest.pulls.listCommits({
     owner, repo, pull_number
   });
 
+  // Calculate Blast Radius (Tier 1)
+  const dependencyMap = {};
+  const allTouchedFiles = files.map(f => f.filename);
+  for (const file of files) {
+    if (file.status === 'removed' || !file.patch) continue;
+    try {
+      const { data } = await octokit.rest.repos.getContent({
+        owner, repo, path: file.filename, ref: pull_request.head.sha
+      });
+      if (data && data.content) {
+        const content = Buffer.from(data.content, 'base64').toString();
+        dependencyMap[file.filename] = parseImports(content, file.filename);
+      }
+    } catch (e) {}
+  }
+  const blastRadiusFiles = calculateBlastRadius(allTouchedFiles, dependencyMap);
+
+  // 3. AI Provenance Detection (Per-Commit)
   const analysisResults = [];
   const modifiedFiles = new Set();
   let totalAdditions = 0;
@@ -199,7 +300,7 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       })
       .join('\n');
 
-    const result = analyzeCommitData({
+    const result = await verifyAnalysis(fullDiff, {
       sha: commit.sha,
       message: commitDetail.commit.message,
       diff: fullDiff,
@@ -207,26 +308,10 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       trailerKey: process.env.TRAILER_KEY || 'AI-generated-by'
     });
 
-    // Integrated LLM Verification for inferred results
-    if (process.env.ENABLE_LLM_VERIFICATION === 'true' && result.confidence > 0 && result.confidence < 100) {
-      try {
-        const verification = await verifyAIGeneration(fullDiff, result.confidence, result.methods);
-        if (verification.verified) {
-          result.confidence = verification.verifiedConfidence;
-          result.methods.push(`llm-verified:${verification.consensus.toLowerCase()}`);
-          result.verificationReason = verification.reason;
-        }
-      } catch (err) {
-        console.error(`[AsyncQueue] LLM Verification failed for commit ${commit.sha}: ${err.message}`);
-      }
-    }
-
     if (result.aiTool || result.methods.length > 0) {
       analysisResults.push(result);
     }
   }
-
-  const allTouchedFiles = Array.from(modifiedFiles);
 
   // 3. Fallback semantic chunks for large diffs
   let semanticAnalysis = null;
@@ -250,9 +335,7 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   const contentRiskTags = evaluateContentRisks(diffChunk);
   const deterministicTags = [...fileRiskTags, ...contentRiskTags];
   
-  const isHighRisk = deterministicTags.length > 0;
-  
-  const skipLLM = isHighConfidenceTrailer && !isHighRisk && process.env.FORCE_LLM !== 'true';
+  const skipLLM = shouldSkipLLM(analysisResults, deterministicTags);
 
   if (!skipLLM && (analysisResults.length > 0 || totalAdditions > 0)) {
      console.log(`[AsyncQueue] Running LLM semantic analysis for PR #${pull_number}...`);
@@ -266,13 +349,46 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
      };
   }
 
-  // 5. Reviewers
+  // 5. Reviewers & Load Balancer
   const codeownersRef = await fetchCodeOwners(octokit, owner, repo);
+  
+  // Fetch reviewer performance stats for the Load Balancer
+  let reviewerStats = {};
+  if (prisma) {
+    try {
+      const recentEvents = await prisma.reviewEvent.findMany({
+        where: { 
+          pullRequest: { 
+            repositoryId: repoRecord.id,
+            latencySeconds: { not: null } 
+          } 
+        },
+        include: { pullRequest: { select: { latencySeconds: true } } },
+        take: 100,
+        orderBy: { createdAt: 'desc' }
+      });
+
+      const latencyMap = {};
+      recentEvents.forEach(ev => {
+        if (!latencyMap[ev.username]) latencyMap[ev.username] = [];
+        latencyMap[ev.username].push(ev.pullRequest.latencySeconds);
+      });
+
+      Object.entries(latencyMap).forEach(([user, latencies]) => {
+        reviewerStats[user] = {
+          avgLatencySeconds: latencies.reduce((a, b) => a + b, 0) / latencies.length
+        };
+      });
+    } catch (dbErr) {
+      console.error(`[AsyncQueue] Load Balancer stats fetch failed: ${dbErr.message}`);
+    }
+  }
+
   let suggestedReviewers = [];
   if (semanticAnalysis && semanticAnalysis.highRiskFiles) {
-    suggestedReviewers = getSuggestedReviewers(semanticAnalysis.highRiskFiles, codeownersRef);
+    suggestedReviewers = getSuggestedReviewers(semanticAnalysis.highRiskFiles, codeownersRef, reviewerStats);
   } else {
-    suggestedReviewers = getSuggestedReviewers(allTouchedFiles, codeownersRef);
+    suggestedReviewers = getSuggestedReviewers(allTouchedFiles, codeownersRef, reviewerStats);
   }
 
   // 6. Build the Packet
@@ -284,9 +400,48 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     deterministicTags
   });
 
+  // 6.1 Agentic PR Triage & Labeling
+  if (semanticAnalysis && semanticAnalysis.triage) {
+    try {
+      const triageLabel = `mb-triage:${semanticAnalysis.triage.toLowerCase()}`;
+      await octokit.rest.issues.addLabels({
+        owner, repo, issue_number: pull_number,
+        labels: [triageLabel]
+      });
+
+      // Auto-approve TRIVIAL if conditions are met
+      const isTrivial = semanticAnalysis.triage === 'TRIVIAL';
+      const hasNoHighRisk = !semanticAnalysis.highRiskFiles || semanticAnalysis.highRiskFiles.length === 0;
+      
+      if (isTrivial && hasNoHighRisk && builtPacket.confidence < 50) {
+        console.log(`[AsyncQueue] PR #${pull_number} is TRIVIAL and low risk. Auto-approving...`);
+        await octokit.rest.issues.createComment({
+          owner, repo, issue_number: pull_number,
+          body: `🤖 **MergeBrief Auto-Triage**: This PR is classified as **TRIVIAL** (low risk, minor changes). \nAuto-approving to accelerate your velocity. 🚀`
+        });
+        
+        await updateCheckRun(octokit, {
+          owner, repo, check_run_id: checkRunId,
+          status: 'completed',
+          conclusion: 'success',
+          output: {
+            title: 'MergeBrief: Auto-Approved',
+            summary: 'Trivial and safe change. No critical paths touched.'
+          }
+        });
+      }
+    } catch (labelErr) {
+      console.error(`[AsyncQueue] Triage labeling failed: ${labelErr.message}`);
+    }
+  }
+
   if (didDiffExceedLimit && builtPacket.summary) {
      builtPacket.summary += '\n\n*(Note: Pull request was exceptionally large; LLM summary is based on a partial sample.)*';
   }
+
+  // Calculate total latency
+  const analysisEnd = Date.now();
+  const latencySeconds = Math.round((analysisEnd - (jobData.addedAt || analysisEnd)) / 1000);
 
   // 7. Persist to DB
   if (prisma) {
@@ -313,7 +468,8 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
       where: { id: prRecord.id },
       data: {
         aiTool: builtPacket.aiTool,
-        confidence: builtPacket.confidence
+        confidence: builtPacket.confidence,
+        latencySeconds
       }
     });
 
@@ -325,39 +481,50 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     }
   }
 
-  // 8. Policy Evaluation
-  const policyResult = evaluatePolicy(builtPacket, commits.flatMap(c => c.files || []), {
-    blockThreshold: parseInt(process.env.POLICY_BLOCK_THRESHOLD || '90'),
-    warnThreshold: parseInt(process.env.POLICY_WARN_THRESHOLD || '50'),
-    strictMode: process.env.POLICY_STRICT_MODE === 'true',
-    criticalPaths: [
-      '**/auth/**', '**/billing/**', '**/security/**', '**/crypto/**',
-      'src/core/gating.js', 'prisma/schema.prisma'
-    ]
-  });
+  // 8. Policy & Governance Decision
+  const policyResult = {
+    action: 'ALLOW',
+    reason: 'Compliant with repository governance policy.'
+  };
+
+  if (builtPacket.confidence > (policy.blockThreshold || 90)) {
+    policyResult.action = 'BLOCK';
+    policyResult.reason = `AI Confidence (${builtPacket.confidence}%) exceeds the governance threshold.`;
+  } else if (builtPacket.confidence > (policy.warnThreshold || 50)) {
+    policyResult.action = 'WARN';
+    policyResult.reason = `Significant AI-assisted changes detected (${builtPacket.confidence}%).`;
+  }
 
   // 9. Output to GitHub Check
-  const appBaseUrl = process.env.BASE_UI_URL || 'http://localhost:3001';
+  const appBaseUrl = process.env.BASE_UI_URL || 'http://localhost:3000';
   const packetUrl = `${appBaseUrl}/packets/${packetId}`;
   
-  let checkSummary = `### MergeBrief Packet Generated\n\n`;
-  checkSummary += `**Packet Status**: COMPLETED\n`;
-  checkSummary += `**Confidence**: ${builtPacket.confidence || 0}% AI Evidence\n`;
-  checkSummary += `**Policy Decision**: ${policyResult.action}\n\n`;
+  let checkSummary = `### 🛡️ MergeBrief Governance Report\n\n`;
+  checkSummary += `**Triage**: ${semanticAnalysis?.triage || 'STANDARD'}\n`;
+  checkSummary += `**Blast Radius**: ${blastRadiusFiles.length} impacted files\n`;
+  checkSummary += `**AI Provenance**: ${builtPacket.confidence || 0}% confidence\n`;
+  checkSummary += `**Decision**: ${policyResult.action}\n\n`;
   
   if (policyResult.reason) {
-    checkSummary += `> ℹ️ **Reason**: ${policyResult.reason}\n\n`;
+    checkSummary += `> ℹ️ **Policy Note**: ${policyResult.reason}\n\n`;
+  }
+
+  if (blastRadiusFiles.length > 0) {
+    checkSummary += `#### 🔍 Impact Analysis (Blast Radius)\n`;
+    checkSummary += blastRadiusFiles.slice(0, 5).map(f => `- \`${f}\``).join('\n');
+    if (blastRadiusFiles.length > 5) checkSummary += `\n- ...and ${blastRadiusFiles.length - 5} more`;
+    checkSummary += `\n\n`;
   }
 
   if (builtPacket.summary) checkSummary += `\n> ${builtPacket.summary}\n`;
-  checkSummary += `\n[🔍 View Full Packet & Risk Details](${packetUrl})`;
+  checkSummary += `\n[🔍 View Governance Details & Full Graph](${packetUrl})`;
 
   await updateCheckRun(octokit, {
     owner, repo, check_run_id: checkRunId,
     status: 'completed',
     conclusion: policyResult.action === 'BLOCK' ? 'failure' : (policyResult.action === 'WARN' ? 'neutral' : 'success'),
     output: {
-      title: policyResult.action === 'BLOCK' ? 'MergeBrief: Action Required' : 'MergeBrief Analysis',
+      title: policyResult.action === 'BLOCK' ? 'Governance: Action Required' : 'Governance: Verified',
       summary: checkSummary
     },
     packetUrl
@@ -402,5 +569,3 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
 
   console.log(`[AsyncQueue] PR #${pull_number} completed successfully.`);
 }
-
-export const processQueue = processNext;

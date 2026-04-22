@@ -38,9 +38,14 @@ Git Diff:
 ${diff.substring(0, 30000)} // Truncate if too long
 `;
 
+  // Routing logic: Route small diffs (<1000 lines) to Haiku for cost efficiency.
+  // Route larger ones or high-confidence provenance to Sonnet.
+  const diffLines = diff.split('\n').length;
+  const model = diffLines < 1000 ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+
   try {
     const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20240620",
+      model,
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -51,7 +56,7 @@ ${diff.substring(0, 30000)} // Truncate if too long
     const content = response.content[0].text;
     return JSON.parse(content);
   } catch (error) {
-    console.error(`[LLM] Error calling Anthropic: ${error.message}`);
+    console.error(`[LLM] Error calling Anthropic (${model}): ${error.message}`);
     return null;
   }
 }

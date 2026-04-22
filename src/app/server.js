@@ -10,7 +10,7 @@ import { checkSubscription } from '../core/gating.js';
 import createApiRouter from './api.js';
 import { prisma } from './db.js';
 import { verifySlackSignature } from './auth-utils.js';
-import { recoverJobs } from './queue.js';
+import { startQueue, stopQueue } from './queue.js';
 import { updateStatusCheck } from '../core/status.js';
 import cors from 'cors';
 
@@ -219,20 +219,27 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
       });
 
       // Update GitHub Status Check
-      if (githubApp && packet) {
+      if (githubApp && githubApp.octokit && packet) {
         try {
-          const { data: installations } = await githubApp.octokit.rest.apps.listInstallations();
-          const installation = installations.find(i => i.account.login === owner);
-          
-          if (installation) {
-            const octokit = await githubApp.getInstallationOctokit(installation.id);
-            await updateStatusCheck(octokit, {
-              owner,
-              repo,
-              sha: packet.headSha,
-              state: 'success',
-              description: `Approved via Slack by @${username}`
-            });
+          // Pagination: List installations across all pages if necessary
+          let installations = [];
+          for await (const { data } of githubApp.octokit.paginate.iterator(
+            githubApp.octokit.rest.apps.listInstallations,
+            { per_page: 100 }
+          )) {
+            installations.push(...data);
+            const found = data.find(i => i.account.login === owner);
+            if (found) {
+              const octokit = await githubApp.getInstallationOctokit(found.id);
+              await updateStatusCheck(octokit, {
+                owner,
+                repo,
+                sha: packet.headSha,
+                state: 'success',
+                description: `Approved via Slack by @${username}`
+              });
+              break;
+            }
           }
         } catch (ghErr) {
           logger.error(`[Slack] Failed to update GitHub status: ${ghErr.message}`);
@@ -300,9 +307,24 @@ app.listen(port, async () => {
 
   if (githubApp) {
     try {
-      await recoverJobs(githubApp);
+      await startQueue(githubApp);
     } catch (error) {
-      logger.error(`[Startup] Failed to recover jobs: ${error.message}`);
+      logger.error(`[Startup] Failed to start queue: ${error.message}`);
     }
   }
 });
+
+// Graceful shutdown — let in-flight pg-boss jobs finish before exiting.
+async function shutdown(signal) {
+  logger.info(`[Shutdown] Received ${signal}, draining queue...`);
+  try {
+    await stopQueue();
+    logger.info('[Shutdown] Queue drained cleanly.');
+  } catch (err) {
+    logger.error(`[Shutdown] stopQueue failed: ${err.message}`);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
