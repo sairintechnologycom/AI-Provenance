@@ -12,7 +12,13 @@ import { buildPacket } from '../core/packet-builder.js';
 import { updateCheckRun } from '../core/checks.js';
 import { evaluatePolicy, applyPolicy } from '../core/policies.js';
 import { verifyAnalysis } from '../core/verifier.js';
-import { parseImports, calculateBlastRadius } from '../core/dep-graph.js';
+import { 
+  parseImports, 
+  calculateBlastRadius, 
+  detectShadowDependencies, 
+  getImpactCriticality 
+} from '../core/dep-graph.js';
+import { evaluateStyleVariance } from '../core/style-engine.js';
 import { prisma } from './db.js';
 import { sendSlackNotification } from './slack.js';
 import { logAppEvent } from './analytics.js';
@@ -253,10 +259,22 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     }
   }
 
-  // 1. Fetch Governance Policy
-  const policy = await evaluatePolicy(octokit, owner, repo);
-  
-  // 2. Fetch Changed Files & Commits
+  // 3. Fetch Repository Context (Policy & Manifest)
+  const { fetchRepoPolicy } = await import('../core/policies.js');
+  const policy = await fetchRepoPolicy(octokit, owner, repo);
+
+  let manifest = null;
+  try {
+    const { data: manifestData } = await octokit.rest.repos.getContent({
+      owner, repo, path: 'package.json', ref: pull_request.head.sha
+    });
+    const manifestContent = Buffer.from(manifestData.content, 'base64').toString();
+    manifest = JSON.parse(manifestContent);
+  } catch (e) {
+    console.log(`[AsyncQueue] No package.json found in ${repo} - skipping shadow dependency check.`);
+  }
+
+  // 4. Fetch PR Diffs & Commits
   const { data: files } = await octokit.rest.pulls.listFiles({
     owner, repo, pull_number, per_page: 100
   });
@@ -334,7 +352,38 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   const fileRiskTags = evaluateDeterministicRisks(allTouchedFiles);
   const contentRiskTags = evaluateContentRisks(diffChunk);
   const lineLevelRisks = evaluateLineLevelRisks(diffChunk);
-  const deterministicTags = [...fileRiskTags, ...contentRiskTags];
+
+  // 4.1 Architectural Integrity (Phase 4)
+  const allImports = Object.values(dependencyMap).flat();
+  const shadowDeps = detectShadowDependencies(allImports, manifest);
+  const impactCriticality = getImpactCriticality(blastRadiusFiles);
+  const archTags = [];
+  
+  if (shadowDeps.length > 0) {
+    archTags.push({ 
+      category: 'shadow-dependency', 
+      reason: `Undocumented dependencies detected: ${shadowDeps.join(', ')}` 
+    });
+  }
+  
+  if (impactCriticality >= 75) {
+    archTags.push({ 
+      category: 'high-blast-radius', 
+      reason: `AI change impacts critical systems (Impact Score: ${impactCriticality})` 
+    });
+  }
+
+  // 4.2 Style Variance Analysis (Phase 5)
+  const styleVariance = evaluateStyleVariance(diffChunk, { namingStyle: 'camelCase' });
+  const styleTags = [];
+  if (styleVariance.score >= 40) {
+    styleTags.push({ 
+      category: 'style-inconsistency', 
+      reason: `Significant stylistic deviations detected (Consistency: ${styleVariance.consistency}%)` 
+    });
+  }
+
+  const deterministicTags = [...fileRiskTags, ...contentRiskTags, ...archTags, ...styleTags];
   
   const skipLLM = shouldSkipLLM(analysisResults, deterministicTags);
 
@@ -399,7 +448,10 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     semanticAnalysis,
     suggestedReviewers,
     deterministicTags,
-    lineLevelRisks
+    lineLevelRisks,
+    shadowDeps,
+    blastRadiusFiles,
+    styleVariance
   });
 
 

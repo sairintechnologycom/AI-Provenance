@@ -9,7 +9,10 @@ export function buildPacket({
   semanticAnalysis = null,
   suggestedReviewers = [],
   deterministicTags = [],
-  lineLevelRisks = []
+  lineLevelRisks = [],
+  shadowDeps = [],
+  blastRadiusFiles = [],
+  styleVariance = null
 }) {
   const packetId = `pkt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -73,7 +76,10 @@ export function buildPacket({
     reviewerSuggestions: formattedReviewers,
     provenanceEvidence,
     lineRisks: lineLevelRisks,
-    rawPayload: JSON.stringify({ diffResults, semanticAnalysis, lineLevelRisks })
+    shadowDeps,
+    blastRadius: blastRadiusFiles,
+    styleVariance,
+    rawPayload: JSON.stringify({ diffResults, semanticAnalysis, lineLevelRisks, shadowDeps, blastRadiusFiles, styleVariance })
   };
 
   return packet;

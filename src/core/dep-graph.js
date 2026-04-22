@@ -86,3 +86,62 @@ export function calculateBlastRadius(changedFiles, dependencyMap) {
 
   return Array.from(impacted);
 }
+
+/**
+ * Detects imports that are not listed in the project's dependency manifest.
+ * @param {string[]} fileImports - List of imports found in a file.
+ * @param {Object} manifest - Parsed package.json or similar.
+ * @returns {string[]} List of "Shadow" dependencies.
+ */
+export function detectShadowDependencies(fileImports, manifest) {
+  if (!manifest) return [];
+  
+  // Combine all declared dependencies
+  const declared = new Set([
+    ...Object.keys(manifest.dependencies || {}),
+    ...Object.keys(manifest.devDependencies || {}),
+    ...Object.keys(manifest.peerDependencies || {})
+  ]);
+
+  const shadow = [];
+
+  for (const imp of fileImports) {
+    // Ignore relative imports and absolute local paths
+    if (imp.startsWith('.') || imp.startsWith('/')) continue;
+
+    // Resolve package name (handle scoped packages @org/pkg)
+    const parts = imp.split('/');
+    const pkgName = imp.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+
+    // Ignore Node.js built-ins (simplified check)
+    const nodeBuiltins = ['fs', 'path', 'os', 'http', 'https', 'crypto', 'stream', 'util', 'events', 'child_process', 'fs/promises'];
+    if (nodeBuiltins.includes(pkgName)) continue;
+
+    if (!declared.has(pkgName)) {
+      shadow.push(imp);
+    }
+  }
+
+  return Array.from(new Set(shadow));
+}
+
+/**
+ * Calculates a criticality score for the blast radius based on sensitive path patterns.
+ * @param {string[]} impactedFiles - Files affected by the change.
+ * @returns {number} 0-100 score.
+ */
+export function getImpactCriticality(impactedFiles) {
+  if (!impactedFiles || impactedFiles.length === 0) return 0;
+
+  let score = 0;
+  const CRITICAL_PATTERNS = [
+    /auth/i, /db/i, /database/i, /security/i, /config/i, /api/i, /middleware/i, /server/i, /core/i
+  ];
+
+  impactedFiles.forEach(file => {
+    const isCritical = CRITICAL_PATTERNS.some(pattern => pattern.test(file));
+    score += isCritical ? 25 : 5;
+  });
+
+  return Math.min(score, 100);
+}

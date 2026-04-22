@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import MergeNoteForm from '@/components/MergeNoteForm';
 import RiskHeatmap from '@/components/RiskHeatmap';
+import ImpactVisualizer from '@/components/ImpactVisualizer';
+import StyleMetrics from '@/components/StyleMetrics';
 
 export const dynamic = 'force-dynamic';
 
@@ -216,6 +218,14 @@ export default async function PacketDetail({
           </div>
 
           <RiskHeatmap lineRisks={packet.lineRisks} />
+
+          <ImpactVisualizer 
+            shadowDeps={packet.shadowDeps} 
+            blastRadius={packet.blastRadius} 
+            isDemo={isDemo}
+          />
+
+          <StyleMetrics styleVariance={packet.styleVariance} />
 
           <section className="glass-card p-8 space-y-8">
             <div className="space-y-2">

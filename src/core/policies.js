@@ -77,6 +77,17 @@ export function applyPolicy(packet, policy = DEFAULT_POLICY) {
      reasons.push(`PR touches high-risk paths with elevated line-level risk.`);
   }
 
+  // 3. Architectural Integrity (Phase 4)
+  const hasShadowDeps = packet.tags?.some(t => t.category === 'shadow-dependency');
+  if (hasShadowDeps) {
+    reasons.push('PR introduces shadow dependencies not present in the manifest.');
+  }
+
+  const hasHighImpact = packet.tags?.some(t => t.category === 'high-blast-radius');
+  if (hasHighImpact) {
+    reasons.push('PR modifications affect high-criticality architectural systems.');
+  }
+
   const decision = reasons.length > 0 ? 'BLOCK' : 
                    (lineRisks.some(r => r.score >= (policy.riskThresholds?.high || 75)) ? 'WARN' : 'PASS');
   
