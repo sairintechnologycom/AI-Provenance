@@ -5,10 +5,17 @@ import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
-export default async function RepoPullRequests({ params }: { params: { owner: string, repo: string } }) {
+export default async function RepoPullRequests({ 
+  params, 
+  searchParams 
+}: { 
+  params: { owner: string, repo: string },
+  searchParams?: { demo?: string }
+}) {
   const session = await getServerSession(authOptions);
+  const isDemo = searchParams?.demo === 'true';
 
-  if (!session) {
+  if (!session && !isDemo) {
     redirect('/api/auth/signin');
   }
 
@@ -21,7 +28,7 @@ export default async function RepoPullRequests({ params }: { params: { owner: st
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/5">
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-sm font-medium text-white/40">
-            <Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link>
+            <Link href={isDemo ? '/dashboard?demo=true' : '/dashboard'} className="hover:text-primary transition-colors">Dashboard</Link>
             <span>/</span>
             <span>{params.owner}</span>
             <span>/</span>
@@ -93,7 +100,7 @@ export default async function RepoPullRequests({ params }: { params: { owner: st
                   </td>
                   <td className="px-6 py-5 whitespace-nowrap text-right">
                     {pr.packet ? (
-                      <Link href={`/packets/${pr.packet.id}`} className="glass-button text-xs py-1.5 px-4 inline-flex hover:border-primary/50 group/btn">
+                      <Link href={`/packets/${pr.packet.id}${isDemo ? '?demo=true' : ''}`} className="glass-button text-xs py-1.5 px-4 inline-flex hover:border-primary/50 group/btn">
                         <span>View Packet</span>
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 transform group-hover/btn:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

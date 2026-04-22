@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 export default function Dashboard() {
   const [repos, setRepos] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const isDemo = searchParams.get('demo') === 'true';
 
   useEffect(() => {
     Promise.all([
@@ -79,7 +82,7 @@ export default function Dashboard() {
           {repos.map((repo: any) => (
             <Link 
               key={repo.id} 
-              href={`/${repo.owner}/${repo.name}`}
+              href={`/${repo.owner}/${repo.name}${isDemo ? '?demo=true' : ''}`}
               className="glass-card p-8 group hover:border-primary/50 transition-all duration-500 hover:-translate-y-2 relative overflow-hidden"
             >
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-3xl -z-10 group-hover:bg-primary/10 transition-colors" />
@@ -118,4 +121,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

@@ -3,7 +3,14 @@ import MergeNoteForm from '@/components/MergeNoteForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PacketDetail({ params }: { params: { id: string } }) {
+export default async function PacketDetail({ 
+  params,
+  searchParams
+}: { 
+  params: { id: string },
+  searchParams?: { demo?: string }
+}) {
+  const isDemo = searchParams?.demo === 'true';
   const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
   const res = await fetch(`${backendUrl}/api/packets/${params.id}`, { cache: 'no-store' });
   
@@ -13,7 +20,7 @@ export default async function PacketDetail({ params }: { params: { id: string } 
         <div className="text-4xl">🔎</div>
         <h2 className="text-2xl font-bold text-white">Analysis in Progress</h2>
         <p className="text-white/40">This packet is being synthesized. Please refresh in a moment.</p>
-        <Link href="/dashboard" className="glass-button inline-flex mt-4">Return to Dashboard</Link>
+        <Link href={isDemo ? '/dashboard?demo=true' : '/dashboard'} className="glass-button inline-flex mt-4">Return to Dashboard</Link>
       </div>
     );
   }
@@ -27,9 +34,9 @@ export default async function PacketDetail({ params }: { params: { id: string } 
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/5">
         <div className="space-y-2">
           <div className="flex items-center gap-3 text-sm font-medium text-white/40">
-            <Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link>
+            <Link href={isDemo ? '/dashboard?demo=true' : '/dashboard'} className="hover:text-primary transition-colors">Dashboard</Link>
             <span>/</span>
-            <Link href={`/${repo.owner}/${repo.name}`} className="hover:text-primary transition-colors">{repo.owner}/{repo.name}</Link>
+            <Link href={`/${repo.owner}/${repo.name}${isDemo ? '?demo=true' : ''}`} className="hover:text-primary transition-colors">{repo.owner}/{repo.name}</Link>
           </div>
           <h2 className="text-4xl font-black tracking-tight text-white flex items-center gap-4">
             PR #{packet.pullRequest.number}
@@ -54,7 +61,6 @@ export default async function PacketDetail({ params }: { params: { id: string } 
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
         <div className="xl:col-span-2 space-y-10">
-          {/* Main Risk Dashboard */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <section className="glass-card p-8 space-y-6 md:col-span-2">
               <div className="flex justify-between items-start">
@@ -179,7 +185,6 @@ export default async function PacketDetail({ params }: { params: { id: string } 
         </div>
 
         <aside className="space-y-10">
-          {/* Decision Panel */}
           <div className="relative group">
             <div className="absolute inset-0 bg-primary/20 blur-[60px] rounded-3xl -z-10 group-hover:bg-primary/30 transition-colors" />
             <MergeNoteForm 
@@ -189,12 +194,11 @@ export default async function PacketDetail({ params }: { params: { id: string } 
             />
           </div>
 
-          {/* Authorship & Evidence */}
           <section className="glass-card p-8 space-y-8">
             <div className="space-y-2">
               <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest">AI Governance Score</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-6xl font-black text-white glow-text">{packet.confidence || 0}%</span>
+                <span className="text-6xl font-black text-white">{packet.confidence || 0}%</span>
                 <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Evidence</span>
               </div>
             </div>
@@ -219,18 +223,12 @@ export default async function PacketDetail({ params }: { params: { id: string } 
                         style={{ width: `${ev.confidence}%` }}
                       ></div>
                     </div>
-                    {ev.reason && (
-                      <p className="text-[10px] text-white/30 italic mt-1 pl-2 border-l border-white/10">
-                        {ev.reason}
-                      </p>
-                    )}
                   </div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Raw Data Toggle */}
           <details className="glass-card overflow-hidden group">
             <summary className="p-4 font-bold text-xs text-white/30 uppercase tracking-[0.2em] cursor-pointer hover:bg-white/5 transition-colors list-none flex justify-between items-center group-open:bg-white/5">
               <span>Raw Signal Dump</span>
@@ -239,7 +237,7 @@ export default async function PacketDetail({ params }: { params: { id: string } 
               </svg>
             </summary>
             <div className="p-6 bg-black/40">
-              <pre className="text-[10px] text-white/40 font-mono leading-relaxed overflow-x-auto selection:bg-primary/40">
+              <pre className="text-[10px] text-white/40 font-mono leading-relaxed overflow-x-auto">
                 {packet.rawPayload ? JSON.stringify(JSON.parse(packet.rawPayload), null, 2) : 'No audit log found.'}
               </pre>
             </div>
