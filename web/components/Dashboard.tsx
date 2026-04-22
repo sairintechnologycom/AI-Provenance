@@ -12,9 +12,10 @@ export default function Dashboard() {
   const isDemo = searchParams.get('demo') === 'true';
 
   useEffect(() => {
+    const query = isDemo ? '?demo=true' : '';
     Promise.all([
-      fetch('/api/repos').then(res => res.json()),
-      fetch('/api/governance/stats').then(res => res.json())
+      fetch(`/api/repos${query}`).then(res => res.json()),
+      fetch(`/api/governance/stats${query}`).then(res => res.json())
     ])
       .then(([reposData, statsData]) => {
         setRepos(reposData);

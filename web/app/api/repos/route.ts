@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const isDemo = searchParams.get('demo') === 'true';
   const session = await getServerSession(authOptions);
   
   // Basic Auth Check
-  if (!session) {
+  if (!session && !isDemo) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const workspaceId = isDemo ? 'demo-workspace-id' : (session?.user as any).workspaceId || '';
+
 
   const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
   const internalKey = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
@@ -17,7 +22,7 @@ export async function GET() {
     const res = await fetch(`${backendUrl}/api/repos`, {
       headers: {
         'x-api-key': internalKey,
-        'x-workspace-id': (session.user as any).workspaceId || ''
+        'x-workspace-id': workspaceId
       },
       next: { revalidate: 0 }
     });

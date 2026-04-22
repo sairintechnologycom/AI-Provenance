@@ -14,8 +14,11 @@ async function main() {
   await prisma.workspace.deleteMany({});
 
   // 2. Create Workspace
-  const workspace = await prisma.workspace.create({
-    data: {
+  const workspace = await prisma.workspace.upsert({
+    where: { id: 'demo-workspace-id' },
+    update: { name: 'Design Partner Beta' },
+    create: {
+      id: 'demo-workspace-id',
       name: 'Design Partner Beta',
       slackWebhookUrl: 'https://hooks.slack.com/services/mock/webhook',
     }

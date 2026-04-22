@@ -27,11 +27,12 @@ export default async function PacketDetail({
   const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
   const internalKey = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
 
+  const workspaceId = isDemo ? 'demo-workspace-id' : (session?.user as any)?.workspaceId || '';
   const res = await fetch(`${backendUrl}/api/packets/${params.id}`, { 
     cache: 'no-store',
     headers: {
       'x-api-key': internalKey,
-      'x-workspace-id': (session?.user as any)?.workspaceId || ''
+      'x-workspace-id': workspaceId
     }
   });
   
@@ -232,6 +233,7 @@ export default async function PacketDetail({
               packetId={packet.id} 
               currentStatus={packet.pullRequest.status} 
               existingNote={packet.pullRequest.approvalNote} 
+              isDemo={isDemo}
             />
           </div>
 

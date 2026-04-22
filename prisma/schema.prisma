@@ -36,8 +36,8 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token            String?
-  access_token             String?
+  refresh_token            String? // @security: Recommendation - encrypt this field
+  access_token             String?  // @security: Recommendation - encrypt this field
   expires_at               Int?
   refresh_token_expires_in Int?
   token_type               String?

@@ -24,11 +24,16 @@ export default function createApiRouter(githubApp) {
    */
   router.get('/repos', checkDb, async (req, res) => {
     const workspaceId = req.headers['x-workspace-id'];
+    
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'x-workspace-id header is required for tenant isolation' });
+    }
+
     try {
       const repos = await prisma.repository.findMany({
-        where: workspaceId ? {
+        where: {
           organization: { workspaceId }
-        } : {}, // In non-production/demo, show all if no workspaceId
+        },
         include: { organization: true },
         orderBy: { updatedAt: 'desc' }
       });
@@ -73,12 +78,19 @@ export default function createApiRouter(githubApp) {
    * Returns list of PRs for a specific repo.
    */
   router.get('/repos/:owner/:repo/pulls', checkDb, async (req, res) => {
+    const workspaceId = req.headers['x-workspace-id'];
+
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'x-workspace-id header is required' });
+    }
+
     try {
       const prs = await prisma.pullRequest.findMany({
         where: {
           repository: {
             owner: req.params.owner,
-            name: req.params.repo
+            name: req.params.repo,
+            organization: { workspaceId }
           }
         },
         include: {
@@ -151,7 +163,11 @@ export default function createApiRouter(githubApp) {
       }
 
       // Tenant Isolation Check
-      if (workspaceId && packet.pullRequest.repository.organization.workspaceId !== workspaceId) {
+      if (!workspaceId) {
+        return res.status(400).json({ error: 'x-workspace-id header is required' });
+      }
+
+      if (packet.pullRequest.repository.organization.workspaceId !== workspaceId) {
         return res.status(403).json({ error: 'Access Denied: This packet does not belong to your workspace' });
       }
 
@@ -273,6 +289,8 @@ export default function createApiRouter(githubApp) {
    * Returns list of waitlist signups.
    */
   router.get('/admin/leads', checkDb, async (req, res) => {
+    // For now, only internal API key (handled by middleware) is required,
+    // but we should eventually add a super-admin role check.
     try {
       const leads = await prisma.lead.findMany({
         orderBy: { createdAt: 'desc' }

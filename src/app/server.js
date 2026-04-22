@@ -167,13 +167,23 @@ app.get('/health', (req, res) => {
 // Internal API Security Middleware
 const verifyInternalKey = (req, res, next) => {
   const apiKey = req.headers['x-api-key'];
-  const internalSecret = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
+  const internalSecret = process.env.INTERNAL_API_KEY;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const defaultSecret = 'mergebrief_local_dev_secret';
   
   if (!apiKey) {
     return res.status(401).json({ error: 'Internal API Key required' });
   }
 
-  if (apiKey !== internalSecret) {
+  // Security check for production
+  if (isProduction && (!internalSecret || internalSecret === defaultSecret)) {
+    logger.error('CRITICAL: INTERNAL_API_KEY is missing or set to default in production!');
+    return res.status(500).json({ error: 'Internal Server Configuration Error' });
+  }
+
+  const effectiveSecret = internalSecret || defaultSecret;
+
+  if (apiKey !== effectiveSecret) {
     return res.status(403).json({ error: 'Invalid Internal API Key' });
   }
 

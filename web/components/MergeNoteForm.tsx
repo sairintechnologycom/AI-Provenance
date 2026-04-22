@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function MergeNoteForm({ packetId, existingNote, currentStatus }: { packetId: string, existingNote?: string, currentStatus: string }) {
+export default function MergeNoteForm({ packetId, existingNote, currentStatus, isDemo }: { packetId: string, existingNote?: string, currentStatus: string, isDemo?: boolean }) {
   const [note, setNote] = useState(existingNote || '');
   const [intent, setIntent] = useState<'VERIFIED' | 'ACCEPTED_AS_IS' | 'PARTIAL'>('VERIFIED');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -104,7 +104,7 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
       <div className="flex flex-col gap-4">
         <button
           onClick={handleSave}
-          disabled={status === 'saving' || !note.trim() || note.trim().length < 10}
+          disabled={isDemo || status === 'saving' || !note.trim() || note.trim().length < 10}
           className="w-full bg-primary hover:bg-primary-dark text-white py-4 rounded-xl font-bold transition-all disabled:opacity-50 disabled:grayscale shadow-[0_10px_30px_rgba(59,130,246,0.3)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 overflow-hidden relative"
         >
           {status === 'saving' ? (
@@ -112,6 +112,8 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               <span className="animate-pulse">Sealing Audit Trail...</span>
             </>
+          ) : isDemo ? (
+            <span>Read-Only Demo Mode</span>
           ) : (
              <>
               <span>Commit Governance Decision</span>
@@ -119,6 +121,12 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
              </>
           )}
         </button>
+        
+        {isDemo && (
+          <p className="text-[10px] text-center text-white/40 font-bold uppercase tracking-widest animate-pulse">
+            Sign in to your own workspace to commit decisions
+          </p>
+        )}
         
         {status === 'success' && (
           <div className="text-center animate-slide-up">

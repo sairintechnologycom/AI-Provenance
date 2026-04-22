@@ -22,11 +22,12 @@ export default async function RepoPullRequests({
   const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
   const internalKey = process.env.INTERNAL_API_KEY || 'mergebrief_local_dev_secret';
 
+  const workspaceId = isDemo ? 'demo-workspace-id' : (session?.user as any)?.workspaceId || '';
   const res = await fetch(`${backendUrl}/api/repos/${params.owner}/${params.repo}/pulls`, { 
     cache: 'no-store',
     headers: {
       'x-api-key': internalKey,
-      'x-workspace-id': (session?.user as any)?.workspaceId || ''
+      'x-workspace-id': workspaceId
     }
   });
   const pulls = res.ok ? await res.json() : [];
