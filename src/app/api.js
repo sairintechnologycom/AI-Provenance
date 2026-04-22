@@ -1,6 +1,27 @@
 import express from 'express';
+import { z } from 'zod';
 import { prisma } from './db.js';
 import { updateStatusCheck } from '../core/status.js';
+
+// --- Validation Schemas ---
+const RepoParamsSchema = z.object({
+  owner: z.string().min(1).max(100),
+  repo: z.string().min(1).max(100)
+});
+
+const PrNumberSchema = z.object({
+  number: z.string().regex(/^\d+$/).transform(Number)
+});
+
+const PacketIdSchema = z.object({
+  id: z.string().min(1)
+});
+
+const ApprovalSchema = z.object({
+  note: z.string().min(1).max(1000),
+  username: z.string().min(1).max(100).optional(),
+  intent: z.record(z.any()).optional()
+});
 
 /**
  * Factory for API Router with GitHub App context
@@ -79,17 +100,23 @@ export default function createApiRouter(githubApp) {
    */
   router.get('/repos/:owner/:repo/pulls', checkDb, async (req, res) => {
     const workspaceId = req.headers['x-workspace-id'];
-
     if (!workspaceId) {
       return res.status(400).json({ error: 'x-workspace-id header is required' });
     }
+
+    const result = RepoParamsSchema.safeParse(req.params);
+    if (!result.success) {
+      return res.status(400).json({ error: 'Invalid repository parameters', detail: result.error.format() });
+    }
+
+    const { owner, repo } = result.data;
 
     try {
       const prs = await prisma.pullRequest.findMany({
         where: {
           repository: {
-            owner: req.params.owner,
-            name: req.params.repo,
+            owner,
+            name: repo,
             organization: { workspaceId }
           }
         },
@@ -109,9 +136,19 @@ export default function createApiRouter(githubApp) {
    * Utility mapping PR numbers to their associated packet.
    */
   router.get('/repos/:owner/:repo/pulls/:number/packet', checkDb, async (req, res) => {
+    const repoResult = RepoParamsSchema.safeParse(req.params);
+    const prResult = PrNumberSchema.safeParse({ number: req.params.number });
+
+    if (!repoResult.success || !prResult.success) {
+      return res.status(400).json({ error: 'Invalid parameters' });
+    }
+
+    const { owner, repo: repoName } = repoResult.data;
+    const { number } = prResult.data;
+
     try {
       const repo = await prisma.repository.findFirst({
-        where: { owner: req.params.owner, name: req.params.repo }
+        where: { owner, name: repoName }
       });
 
       if (!repo) return res.status(404).json({ error: 'Repository not found' });
@@ -120,7 +157,7 @@ export default function createApiRouter(githubApp) {
         where: {
           repositoryId_number: {
             repositoryId: repo.id,
-            number: parseInt(req.params.number)
+            number
           }
         },
         include: { packet: true }
@@ -140,9 +177,14 @@ export default function createApiRouter(githubApp) {
    */
   router.get('/packets/:id', checkDb, async (req, res) => {
     const workspaceId = req.headers['x-workspace-id'];
+    const result = PacketIdSchema.safeParse(req.params);
+    if (!result.success) {
+      return res.status(400).json({ error: 'Invalid packet ID' });
+    }
+
     try {
       const packet = await prisma.mergeBriefPacket.findUnique({
-        where: { id: req.params.id },
+        where: { id: result.data.id },
         include: {
           pullRequest: {
             include: { 
@@ -182,15 +224,19 @@ export default function createApiRouter(githubApp) {
    * Approves a packet, updates DB, and clears GitHub gate.
    */
   router.post('/packets/:id/approve', checkDb, async (req, res) => {
-    const { note, username, intent } = req.body;
-    
-    if (!note) {
-      return res.status(400).json({ error: 'Approval note is required' });
+    const bodyResult = ApprovalSchema.safeParse(req.body);
+    const idResult = PacketIdSchema.safeParse(req.params);
+
+    if (!bodyResult.success || !idResult.success) {
+      return res.status(400).json({ error: 'Invalid approval data', details: bodyResult.error?.format() });
     }
+
+    const { note, username, intent } = bodyResult.data;
+    const { id: packetId } = idResult.data;
 
     try {
       const packet = await prisma.mergeBriefPacket.findUnique({
-        where: { id: req.params.id },
+        where: { id: packetId },
         include: {
           pullRequest: {
             include: {

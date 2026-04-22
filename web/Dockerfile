@@ -41,5 +41,8 @@ ENV PORT=3001
 
 EXPOSE 3001
 
+# Drop privileges
+USER node
+
 # Start the application
 CMD ["npm", "--prefix", "web", "start"]

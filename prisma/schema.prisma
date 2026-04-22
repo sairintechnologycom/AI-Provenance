@@ -3,6 +3,11 @@ generator client {
   engineType = "library"
 }
 
+generator client_web {
+  provider = "prisma-client-js"
+  output   = "../web/node_modules/.prisma/client"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -36,8 +41,8 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token            String? // @security: Recommendation - encrypt this field
-  access_token             String?  // @security: Recommendation - encrypt this field
+  refresh_token            String? // @security: Encrypted at rest via Prisma Extension
+  access_token             String?  // @security: Encrypted at rest via Prisma Extension
   expires_at               Int?
   refresh_token_expires_in Int?
   token_type               String?

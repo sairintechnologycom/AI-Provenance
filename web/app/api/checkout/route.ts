@@ -15,17 +15,23 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({
       // @ts-ignore
       where: { id: session.user.id },
-      include: { subscription: true }
+      include: { 
+        workspace: {
+          include: { subscription: true }
+        }
+      }
     });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    const subscription = user.workspace?.subscription;
+
     // Redirect to billing portal if already subscribed
-    if (user.subscription?.stripeCustomerId && user.subscription.status === 'active') {
+    if (subscription?.stripeCustomerId && subscription.status === 'active') {
       const portalSession = await stripe.billingPortal.sessions.create({
-        customer: user.subscription.stripeCustomerId,
+        customer: subscription.stripeCustomerId,
         return_url: `${process.env.NEXTAUTH_URL}/dashboard`,
       });
       return NextResponse.json({ url: portalSession.url });
@@ -45,6 +51,7 @@ export async function POST(req: Request) {
       cancel_url: `${process.env.NEXTAUTH_URL}/dashboard`,
       metadata: {
         userId: user.id,
+        workspaceId: user.workspaceId || '',
       },
     });
 

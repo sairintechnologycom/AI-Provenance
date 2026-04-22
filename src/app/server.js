@@ -13,6 +13,7 @@ import { verifySlackSignature } from './auth-utils.js';
 import { startQueue, stopQueue } from './queue.js';
 import { updateStatusCheck } from '../core/status.js';
 import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -138,6 +139,26 @@ if (process.env.APP_ID && process.env.PRIVATE_KEY) {
 app.use(morgan('combined', { 
   stream: { write: message => logger.info(message.trim(), { service: 'morgan' }) } 
 }));
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window`
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+const webhookLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // Limit each IP to 20 webhook requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Webhook rate limit exceeded.' }
+});
+
+// Apply global rate limiter to all requests
+app.use(globalLimiter);
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
@@ -294,7 +315,7 @@ app.post('/api/slack/interact', verifySlackSignature, async (req, res) => {
 });
 
 // Main Webhook endpoint
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', webhookLimiter, async (req, res) => {
   if (!githubApp) {
     return res.status(503).send('GitHub App not configured');
   }

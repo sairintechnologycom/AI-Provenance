@@ -29,5 +29,8 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
+# Drop privileges
+USER node
+
 # Start the application
 CMD ["node", "src/app/server.js"]
