@@ -124,6 +124,7 @@ model PullRequest {
   latencySeconds Int?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+  reviewerIntent Json?
   
   analysisJobs   AnalysisJob[]
   packet         MergeBriefPacket?
@@ -163,6 +164,17 @@ model MergeBriefPacket {
   provenanceEvidence  PacketProvenanceEvidence[]
   reviewerSuggestions PacketReviewerSuggestion[]
   tags                PacketRiskTag[]
+  lineRisks           PacketLineRisk[]
+}
+
+model PacketLineRisk {
+  id       String           @id @default(cuid())
+  packetId String
+  file     String
+  line     Int
+  score    Int              // 0-100 uncertainty score
+  reason   String?
+  packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
 model PacketRiskTag {

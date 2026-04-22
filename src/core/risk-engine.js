@@ -119,3 +119,79 @@ export function evaluateContentRisks(diff) {
 
   return contentRisks;
 }
+
+/**
+ * Analyzes a unified diff to identify specific lines with high risk or uncertainty.
+ * @param {string} diff - Unified diff string.
+ * @returns {Array<{file: string, line: number, score: number, reason: string}>}
+ */
+export function evaluateLineLevelRisks(diff) {
+  const lineRisks = [];
+  const lines = diff.split('\n');
+  let currentFile = '';
+  let currentLine = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('+++ b/')) {
+      currentFile = line.substring(6);
+      continue;
+    }
+    if (line.startsWith('@@ ')) {
+      const match = line.match(/\+([0-9]+)/);
+      if (match) currentLine = parseInt(match[1]) - 1;
+      continue;
+    }
+
+    if (line.startsWith('+')) {
+      currentLine++;
+      const content = line.substring(1).trim();
+      if (!content) continue;
+
+      // 1. AI Artifacts / Leaks (High Risk)
+      if (/(as an? ai (language )?model|honest?ly, I (don't|cannot)|here'?s a? (template|suggested|example))/i.test(content)) {
+        lineRisks.push({
+          file: currentFile,
+          line: currentLine,
+          score: 95,
+          reason: 'AI chat residue detected.'
+        });
+      }
+
+      // 2. Hallucinated Imports (High Risk)
+      if (/(import|require|from)\s*['"](@?[a-z0-9-]+\/[a-z0-9-]+-implementation-helper|universal-.*-generator-api|mock-database-connector-pro)['"]/i.test(content)) {
+        lineRisks.push({
+          file: currentFile,
+          line: currentLine,
+          score: 90,
+          reason: 'Potential hallucinated library import.'
+        });
+      }
+
+      // 3. Complexity Spike (Medium Risk)
+      // Heuristic: deep nesting or many operators in a single line
+      const operators = (content.match(/[&|?<>!=]{2,}|=>/g) || []).length;
+      if (operators > 3 || content.length > 120) {
+        lineRisks.push({
+          file: currentFile,
+          line: currentLine,
+          score: 60,
+          reason: 'High logic density (potential hallucination prone).'
+        });
+      }
+      
+      // 4. Placeholder values
+      if (/(your_api_key_here|insert_.*_here|example\.com\/api|REPLACE_ME)/i.test(content)) {
+        lineRisks.push({
+          file: currentFile,
+          line: currentLine,
+          score: 85,
+          reason: 'Unreplaced AI placeholder detected.'
+        });
+      }
+    } else if (!line.startsWith('-')) {
+      currentLine++;
+    }
+  }
+
+  return lineRisks;
+}

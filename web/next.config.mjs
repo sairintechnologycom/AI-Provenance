@@ -4,8 +4,8 @@ const nextConfig = {
     const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:3000';
     return [
       {
-        source: '/api/:path*',
-        destination: `${backendUrl}/api/:path*`,
+        source: '/api/:path(repos|governance|packets|jobs|admin|slack)/:path2*',
+        destination: `${backendUrl}/api/:path/:path2*`,
       },
     ];
   },

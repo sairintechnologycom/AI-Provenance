@@ -7,10 +7,10 @@ import { PgBoss } from 'pg-boss';
 import { analyzeCommitData } from '../core/detect.js';
 import { analyzeDiffIntent } from '../core/llm.js';
 import { fetchCodeOwners, getSuggestedReviewers } from '../core/codeowners.js';
-import { evaluateDeterministicRisks, evaluateContentRisks } from '../core/risk-engine.js';
+import { evaluateDeterministicRisks, evaluateContentRisks, evaluateLineLevelRisks } from '../core/risk-engine.js';
 import { buildPacket } from '../core/packet-builder.js';
 import { updateCheckRun } from '../core/checks.js';
-import { evaluatePolicy } from '../core/policies.js';
+import { evaluatePolicy, applyPolicy } from '../core/policies.js';
 import { verifyAnalysis } from '../core/verifier.js';
 import { parseImports, calculateBlastRadius } from '../core/dep-graph.js';
 import { prisma } from './db.js';
@@ -333,6 +333,7 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   // 4. Risk Engine Evaluation
   const fileRiskTags = evaluateDeterministicRisks(allTouchedFiles);
   const contentRiskTags = evaluateContentRisks(diffChunk);
+  const lineLevelRisks = evaluateLineLevelRisks(diffChunk);
   const deterministicTags = [...fileRiskTags, ...contentRiskTags];
   
   const skipLLM = shouldSkipLLM(analysisResults, deterministicTags);
@@ -397,8 +398,10 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
     diffResults: analysisResults,
     semanticAnalysis,
     suggestedReviewers,
-    deterministicTags
+    deterministicTags,
+    lineLevelRisks
   });
+
 
   // 6.1 Agentic PR Triage & Labeling
   if (semanticAnalysis && semanticAnalysis.triage) {
@@ -460,7 +463,8 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
         tags: { create: builtPacket.tags },
         intents: { create: builtPacket.intents },
         reviewerSuggestions: { create: builtPacket.reviewerSuggestions },
-        provenanceEvidence: { create: builtPacket.provenanceEvidence }
+        provenanceEvidence: { create: builtPacket.provenanceEvidence },
+        lineRisks: { create: builtPacket.lineRisks }
       }
     });
 
@@ -482,17 +486,26 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   }
 
   // 8. Policy & Governance Decision
+  const gatingResult = applyPolicy(builtPacket, policy);
   const policyResult = {
-    action: 'ALLOW',
-    reason: 'Compliant with repository governance policy.'
+    action: gatingResult.decision,
+    reason: gatingResult.reasons.join('; ') || 'Compliant with repository governance policy.'
   };
 
-  if (builtPacket.confidence > (policy.blockThreshold || 90)) {
-    policyResult.action = 'BLOCK';
-    policyResult.reason = `AI Confidence (${builtPacket.confidence}%) exceeds the governance threshold.`;
-  } else if (builtPacket.confidence > (policy.warnThreshold || 50)) {
-    policyResult.action = 'WARN';
-    policyResult.reason = `Significant AI-assisted changes detected (${builtPacket.confidence}%).`;
+  if (policyResult.action === 'BLOCK') {
+    console.log(`[AsyncQueue] PR #${pull_number} BLOCKED by Governance Policy: ${policyResult.reason}`);
+    try {
+      await octokit.rest.issues.createComment({
+        owner, repo, issue_number: pull_number,
+        body: `🛑 **MergeBrief Governance Alert**: This PR has been flagged for **CRITICAL AI RISK**. 
+\nManual human verification is MANDATORY before merging.
+\n**Blocking Reasons:**
+\n- ${gatingResult.reasons.join('\n- ')}
+\n[View Detailed Risk Heatmap](${packetUrl})`
+      });
+    } catch (commentErr) {
+       console.error(`[AsyncQueue] Failed to create blocking comment: ${commentErr.message}`);
+    }
   }
 
   // 9. Output to GitHub Check

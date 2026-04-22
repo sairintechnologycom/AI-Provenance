@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import MergeNoteForm from '@/components/MergeNoteForm';
+import RiskHeatmap from '@/components/RiskHeatmap';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +29,28 @@ export default async function PacketDetail({
   const packet = await res.json();
   const repo = packet.pullRequest.repository;
 
+  const isBlocked = packet.lineRisks?.some((r: any) => r.score >= 90) || 
+                   (packet.lineRisks?.reduce((sum: number, r: any) => sum + (r.score || 0), 0) >= 500);
+
   return (
     <div className="space-y-10 animate-fade-in">
+      {isBlocked && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_20px_50px_rgba(239,68,68,0.15)]">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 bg-red-500/20 rounded-2xl flex items-center justify-center text-3xl animate-pulse">
+              🛑
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-bold text-red-400">Governance Block Active</h3>
+              <p className="text-sm text-red-400/60 font-medium">Critical AI-assisted changes detected. Manual security override is required.</p>
+            </div>
+          </div>
+          <div className="px-6 py-3 bg-red-500 text-white rounded-xl font-black text-xs uppercase tracking-widest">
+            Policy Failure
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-white/5">
         <div className="space-y-2">
@@ -193,6 +214,8 @@ export default async function PacketDetail({
               existingNote={packet.pullRequest.approvalNote} 
             />
           </div>
+
+          <RiskHeatmap lineRisks={packet.lineRisks} />
 
           <section className="glass-card p-8 space-y-8">
             <div className="space-y-2">

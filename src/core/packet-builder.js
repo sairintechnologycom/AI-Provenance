@@ -8,7 +8,8 @@ export function buildPacket({
   diffResults = [],
   semanticAnalysis = null,
   suggestedReviewers = [],
-  deterministicTags = []
+  deterministicTags = [],
+  lineLevelRisks = []
 }) {
   const packetId = `pkt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -71,7 +72,8 @@ export function buildPacket({
     intents,
     reviewerSuggestions: formattedReviewers,
     provenanceEvidence,
-    rawPayload: JSON.stringify({ diffResults, semanticAnalysis })
+    lineRisks: lineLevelRisks,
+    rawPayload: JSON.stringify({ diffResults, semanticAnalysis, lineLevelRisks })
   };
 
   return packet;

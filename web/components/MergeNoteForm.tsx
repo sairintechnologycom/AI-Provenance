@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 export default function MergeNoteForm({ packetId, existingNote, currentStatus }: { packetId: string, existingNote?: string, currentStatus: string }) {
   const [note, setNote] = useState(existingNote || '');
+  const [intent, setIntent] = useState<'VERIFIED' | 'ACCEPTED_AS_IS' | 'PARTIAL'>('VERIFIED');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const router = useRouter();
 
@@ -19,7 +20,14 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
       const res = await fetch(`/api/packets/${packetId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: note.trim() })
+        body: JSON.stringify({ 
+          note: note.trim(),
+          intent: {
+            type: intent,
+            timestamp: new Date().toISOString(),
+            segmentsVerified: intent === 'VERIFIED' ? 'ALL' : 'PARTIAL'
+          }
+        })
       });
       if (res.ok) {
         setStatus('success');
@@ -33,8 +41,14 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
     }
   };
 
+  const intents = [
+    { id: 'VERIFIED', label: 'Verified', icon: '🔍', desc: 'I tested the logic personally.' },
+    { id: 'PARTIAL', label: 'Spot Check', icon: '⚡', desc: 'Verified logic flow only.' },
+    { id: 'ACCEPTED_AS_IS', label: 'Risk Accepted', icon: '⚠️', desc: 'Accepting AI risk for this PR.' },
+  ];
+
   return (
-    <div className="glass-card p-8 space-y-6 relative overflow-hidden group">
+    <div className="glass-card p-8 space-y-8 relative overflow-hidden group">
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-bold text-white tracking-tight">Governance Decision</h3>
         {currentStatus === 'APPROVED' && (
@@ -47,17 +61,43 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus }:
         )}
       </div>
       
-      <p className="text-sm text-white/50 leading-relaxed font-medium">Record a human audit trail explaining why this AI-assisted logic is acceptable for deployment. This note is persisted as the source of truth for compliance.</p>
+      <div className="space-y-4">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-white/30 font-bold">Review Intent</p>
+        <div className="grid grid-cols-3 gap-3">
+          {intents.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setIntent(item.id as any)}
+              className={`p-4 rounded-2xl border text-left transition-all duration-300 group/item ${
+                intent === item.id 
+                  ? 'bg-primary/20 border-primary shadow-[0_0_20px_rgba(59,130,246,0.15)]' 
+                  : 'bg-white/5 border-white/10 hover:border-white/30'
+              }`}
+            >
+              <div className="flex flex-col gap-2">
+                <span className="text-xl">{item.icon}</span>
+                <div>
+                  <p className={`text-xs font-bold ${intent === item.id ? 'text-primary' : 'text-white'}`}>{item.label}</p>
+                  <p className="text-[9px] text-white/40 font-medium leading-tight mt-1">{item.desc}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
       
-      <div className="relative">
-        <textarea
-          className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-white placeholder:text-white/20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-300 text-sm h-44 resize-none leading-relaxed"
-          placeholder="e.g. Reviewed the connection pooling logic personally. The AI correctly identified the contention issue and implemented a robust retry strategy."
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <div className="absolute bottom-4 right-4 text-[10px] font-bold text-white/20 uppercase tracking-widest pointer-events-none">
-          {note.trim().length} / 10 min
+      <div className="space-y-4">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-white/30 font-bold">Audit Trail Rationale</p>
+        <div className="relative">
+          <textarea
+            className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-white placeholder:text-white/20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-300 text-sm h-40 resize-none leading-relaxed"
+            placeholder="e.g. Reviewed the connection pooling logic personally. The AI correctly identified the contention issue and implemented a robust retry strategy."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          <div className="absolute bottom-4 right-4 text-[10px] font-bold text-white/20 uppercase tracking-widest pointer-events-none">
+            {note.trim().length} / 10 min
+          </div>
         </div>
       </div>
 

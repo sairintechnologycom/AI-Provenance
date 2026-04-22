@@ -133,7 +133,8 @@ export default function createApiRouter(githubApp) {
           tags: true,
           intents: true,
           reviewerSuggestions: true,
-          provenanceEvidence: true
+          provenanceEvidence: true,
+          lineRisks: true
         }
       });
 
@@ -152,7 +153,7 @@ export default function createApiRouter(githubApp) {
    * Approves a packet, updates DB, and clears GitHub gate.
    */
   router.post('/packets/:id/approve', checkDb, async (req, res) => {
-    const { note, username } = req.body;
+    const { note, username, intent } = req.body;
     
     if (!note) {
       return res.status(400).json({ error: 'Approval note is required' });
@@ -184,7 +185,8 @@ export default function createApiRouter(githubApp) {
         where: { id: pr.id },
         data: {
           status: 'APPROVED',
-          approvalNote: note
+          approvalNote: note,
+          reviewerIntent: intent || {}
         }
       });
 

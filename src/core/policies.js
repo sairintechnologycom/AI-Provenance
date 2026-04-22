@@ -12,6 +12,11 @@ export const DEFAULT_POLICY = {
   labels: {
     triage: true,
     confidence: true
+  },
+  riskThresholds: {
+    critical: 90, // Block if any line >= 90
+    high: 75,     // Require verification if any line >= 75
+    maxCumulativeScore: 500 // Block if total line-level risk exceeds this
   }
 };
 
@@ -44,4 +49,43 @@ export async function evaluatePolicy(octokit, owner, repo) {
   }
 
   return DEFAULT_POLICY;
+}
+
+/**
+ * Evaluates a completed MergeBrief packet against a repository policy.
+ * @returns { decision: 'BLOCK' | 'PASS' | 'WARN', reasons: string[] }
+ */
+export function applyPolicy(packet, policy = DEFAULT_POLICY) {
+  const reasons = [];
+  const lineRisks = packet.lineRisks || [];
+  
+  // 1. Check Critical Thresholds
+  const criticalLines = lineRisks.filter(r => r.score >= (policy.riskThresholds?.critical || 90));
+  if (criticalLines.length > 0) {
+    reasons.push(`Found ${criticalLines.length} line(s) with CRITICAL risk scores (>= ${policy.riskThresholds.critical}).`);
+  }
+
+  // 2. Check Cumulative Risk
+  const totalScore = lineRisks.reduce((sum, r) => sum + r.score, 0);
+  if (totalScore >= (policy.riskThresholds?.maxCumulativeScore || 500)) {
+    reasons.push(`Cumulative line-level risk score (${totalScore}) exceeds threshold (${policy.riskThresholds.maxCumulativeScore}).`);
+  }
+
+  // 3. High Risk Paths (Existing tags check)
+  const highRiskTags = (packet.tags || []).filter(t => t.category === 'deterministic' && t.label === 'Security Sensitive');
+  if (highRiskTags.length > 0 && lineRisks.some(r => r.score >= 70)) {
+     reasons.push(`PR touches high-risk paths with elevated line-level risk.`);
+  }
+
+  const decision = reasons.length > 0 ? 'BLOCK' : 
+                   (lineRisks.some(r => r.score >= (policy.riskThresholds?.high || 75)) ? 'WARN' : 'PASS');
+  
+  if (decision === 'WARN' && reasons.length === 0) {
+    reasons.push(`Significant AI-assisted changes detected (scores >= ${policy.riskThresholds?.high || 75}).`);
+  }
+
+  return {
+    decision,
+    reasons
+  };
 }
