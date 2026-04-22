@@ -16,16 +16,10 @@ export async function handlePullRequest({ octokit, payload }) {
   const repo = repository.name;
   const pull_number = pull_request.number;
 
-  // Handle PR closure for Telemetry Ingestion
+  // Handle PR closure for Telemetry Ingestion (This can also be async)
   if (action === 'closed') {
-    console.log(`[Webhook] Pull Request #${pull_number} closed (Merged: ${pull_request.merged}). Ingesting telemetry...`);
-    if (pull_request.merged) {
-      await ingestTelemetry(octokit, {
-        owner,
-        repo,
-        pull_request
-      });
-    }
+    console.log(`[Webhook] PR #${pull_number} closed. Enqueuing telemetry ingestion...`);
+    await queueJob({ type: 'telemetry', payload });
     return;
   }
 
@@ -33,115 +27,14 @@ export async function handlePullRequest({ octokit, payload }) {
     return;
   }
 
-  console.log(`[Webhook] Processing PR #${pull_number} for ${owner}/${repo} (Action: ${action})`);
+  console.log(`[Webhook] Fast-enqueuing PR #${pull_number} for ${owner}/${repo}`);
   
-  // Gating Check
-  const isPrivate = repository.private;
-  const gate = await checkSubscription({ owner, repo, isPrivate });
-  
-  if (!gate.allowed) {
-    console.log(`[Webhook] Analysis blocked for PR #${pull_number} (${owner}/${repo}): ${gate.reason}`);
-    
-    // Create a failed CheckRun to notify user why analysis stopped
-    await createCheckRun(octokit, {
-      owner,
-      repo,
-      sha: pull_request.head.sha,
-      conclusion: 'action_required',
-      output: {
-        title: 'MergeBrief: Analysis Disabled',
-        summary: gate.message,
-        text: `To enable AI provenance analysis for private repositories, please upgrade your MergeBrief subscription in the dashboard.`
-      }
-    });
-    return;
-  }
-
-  try {
-    let prRecord = { id: 'temp_' + Date.now(), number: pull_number };
-    let dbRepo = { id: 'temp_repo', owner, name: repo };
-    let dbPacket = { id: 'temp_pkt' };
-
-    if (prisma) {
-      // Scaffold DB structs
-      const orgData = { githubId: String(repository.owner.id), login: owner };
-      const repoData = { githubId: String(repository.id), owner, name: repo };
-
-      const dbOrg = await prisma.organization.upsert({
-        where: { githubId: orgData.githubId },
-        update: { login: orgData.login },
-        create: orgData
-      });
-
-      dbRepo = await prisma.repository.upsert({
-        where: { githubId: repoData.githubId },
-        update: { owner: repoData.owner, name: repoData.name },
-        create: { ...repoData, organizationId: dbOrg.id }
-      });
-
-      prRecord = await prisma.pullRequest.upsert({
-        where: { repositoryId_number: { repositoryId: dbRepo.id, number: pull_number } },
-        update: { merged: pull_request.merged, status: 'PENDING' },
-        create: {
-          githubId: String(pull_request.id),
-          number: pull_number,
-          repositoryId: dbRepo.id,
-          status: 'PENDING',
-          merged: pull_request.merged
-        }
-      });
-
-      await prisma.mergeBriefPacket.deleteMany({
-        where: { pullRequestId: prRecord.id }
-      });
-      
-      dbPacket = await prisma.mergeBriefPacket.create({
-        data: {
-          pullRequestId: prRecord.id,
-          status: 'QUEUED',
-          version: 1
-        }
-      });
-    }
-
-    // Fire CheckRun directly via Checks API
-    const checkRun = await createCheckRun(octokit, {
-      owner,
-      repo,
-      sha: pull_request.head.sha
-    });
-
-    if (checkRun) {
-      let jobId = 'temp_job_' + Date.now();
-      
-      if (prisma) {
-        const job = await prisma.analysisJob.create({
-          data: {
-            pullRequestId: prRecord.id,
-            packetId: dbPacket.id,
-            checkRunId: String(checkRun.id),
-            status: 'QUEUED',
-            payload: payload // Store full payload for recovery
-          }
-        });
-        jobId = job.id;
-      }
-
-      // Fire async to the queue to not timeout the webhook
-      queueJob({
-        octokit,
-        payload,
-        repoRecord: dbRepo,
-        prRecord,
-        checkRunId: checkRun.id,
-        packetId: dbPacket.id,
-        jobId
-      });
-    }
-
-  } catch (error) {
-    console.error(`[Webhook] Error processing PR #${pull_number}:`, error.message);
-  }
+  // Enqueue immediately to avoid webhook timeouts.
+  // The worker will handle gating, DB persistence, and check run creation.
+  await queueJob({
+    type: 'analysis',
+    payload
+  });
 }
 
 /**
@@ -409,9 +302,8 @@ export async function handleInstallationRepositories({ payload }) {
       }
 
       if (repositories_removed) {
-        for (const repo of repositories_removed) {
-          // We don't delete history, just mark as inactive
-        }
+        console.log(`[Webhook] ${repositories_removed.length} repositories removed from installation.`);
+        // Note: We don't delete history, we just log the event for now.
       }
     }
   } catch (error) {

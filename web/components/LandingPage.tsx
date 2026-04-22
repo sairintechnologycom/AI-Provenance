@@ -5,34 +5,34 @@ import Link from 'next/link';
 
 const outcomes = [
   {
-    title: 'Detect likely AI-written code',
-    body: 'Score pull requests for probable AI authorship using commit signals, diff heuristics, and verification methods.'
+    title: 'Agentic PR Triage',
+    body: 'Automatically classify PRs as Trivial, Standard, or High-Risk. Auto-approve safe changes to maintain peak engineering velocity.'
   },
   {
-    title: 'Focus review where risk is highest',
-    body: 'Flag changes in auth, database, configuration, and other sensitive areas so reviewers spend time where it matters.'
+    title: 'Reviewer Load Balancer',
+    body: 'Intelligent routing based on historical review latency. Get your AI-assisted code in front of the most responsive experts.'
   },
   {
-    title: 'Record human approval with rationale',
-    body: 'Require a reviewer to document why the AI-assisted change is acceptable before it moves forward.'
+    title: 'Blast Radius Analysis',
+    body: 'Understand the logical ripple effects of AI suggestions with dependency-graph aware impact reports.'
   }
 ];
 
 const workflow = [
-  'Analyze pull requests and build a provenance packet.',
-  'Show confidence, evidence, intent summary, and risk areas.',
-  'Collect reviewer approval notes for AI-touched changes.',
-  'Keep an audit trail across repositories and pull requests.'
+  'Analyze pull requests and enforce repository-specific governance policies.',
+  'Classify risks and calculate the logical blast radius of proposed changes.',
+  'Route high-risk modules to the best-fit reviewers based on performance.',
+  'Maintain a cryptographic audit trail of human accountability for AI code.'
 ];
 
 const comparison = [
   {
     label: 'GitHub, GitLab, Bitbucket',
-    body: 'Helpful for AI-assisted review, summaries, comments, and merge controls.'
+    body: 'Helpful for AI-assisted review, but lack the control plane needed for enterprise accountability.'
   },
   {
-    label: 'MergeBrief',
-    body: 'Built for AI code governance: provenance, risk review, and accountable approval.'
+    label: 'MergeBrief Governance',
+    body: 'A centralized control plane for PR governance: triage, load balancing, and policy-as-code.'
   }
 ];
 
@@ -61,15 +61,15 @@ export default function LandingPage() {
       <section className="grid gap-12 border border-white/10 bg-white/[0.02] px-8 py-12 md:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)] md:px-12">
         <div className="space-y-8">
           <div className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            AI code governance for pull requests
+            PR Governance for AI-era velocity
           </div>
 
           <div className="space-y-5">
             <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-              Govern AI-generated code before it ships.
+              Shipping AI code safely shouldn&apos;t slow you down.
             </h1>
             <p className="max-w-2xl text-lg leading-8 text-white/70 md:text-xl">
-              MergeBrief detects likely AI-written code in pull requests, flags risky changes, and records human approval with rationale.
+              MergeBrief is the governance control plane for enterprise engineering. Triage AI-assisted PRs, balance reviewer loads, and enforce policy-as-code at scale.
             </p>
           </div>
 

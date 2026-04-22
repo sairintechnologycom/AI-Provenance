@@ -46,6 +46,7 @@ async function main() {
       number: 42,
       repositoryId: repo.id,
       status: 'PENDING',
+      latencySeconds: 124,
     }
   });
 
@@ -96,7 +97,8 @@ async function main() {
       number: 43,
       repositoryId: repo.id,
       status: 'APPROVED',
-      approvalNote: 'Verified human logic for the critical race condition fix.'
+      approvalNote: 'Verified human logic for the critical race condition fix.',
+      latencySeconds: 45,
     }
   });
 

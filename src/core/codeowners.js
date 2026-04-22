@@ -46,9 +46,10 @@ function parseCodeOwners(content) {
 }
 
 /**
- * Suggests reviewers based on high-risk files identified by LLM and CODEOWNERS rules.
+ * Suggests reviewers based on high-risk files and CODEOWNERS rules.
+ * Optinally weights by historical performance (Reviewer Load Balancer).
  */
-export function getSuggestedReviewers(highRiskFiles, codeownersContent) {
+export function getSuggestedReviewers(highRiskFiles, codeownersContent, reviewerStats = {}) {
   if (!codeownersContent || !highRiskFiles || highRiskFiles.length === 0) {
     return [];
   }
@@ -57,7 +58,6 @@ export function getSuggestedReviewers(highRiskFiles, codeownersContent) {
   const suggestedReviewers = new Set();
 
   for (const file of highRiskFiles) {
-    // CODEOWNERS rule: the last matching pattern takes precedence
     let bestMatch = null;
     
     for (const rule of rules) {
@@ -72,15 +72,9 @@ export function getSuggestedReviewers(highRiskFiles, codeownersContent) {
       let matchPattern = pattern;
 
       if (isAbsolute) {
-        // Relative to root - remove leading slash as file paths are usually relative
         matchPattern = pattern.substring(1);
       } else if (!pattern.includes('/')) {
-        // Patterns without slashes match anywhere (like matchBase)
         options.matchBase = true;
-      } else {
-        // Patterns with slashes but no leading slash are also relative to root in GitHub
-        // (This is a bit different from gitignore but common in CODEOWNERS)
-        // matchPattern = pattern; // already is
       }
 
       if (minimatch(file, matchPattern, options)) {
@@ -89,9 +83,24 @@ export function getSuggestedReviewers(highRiskFiles, codeownersContent) {
     }
 
     if (bestMatch) {
-      bestMatch.owners.forEach(owner => suggestedReviewers.add(owner));
+      bestMatch.owners.forEach(owner => {
+        // Clean @ if present
+        const cleanName = owner.startsWith('@') ? owner.substring(1) : owner;
+        suggestedReviewers.add(cleanName);
+      });
     }
   }
 
-  return Array.from(suggestedReviewers);
+  const reviewers = Array.from(suggestedReviewers);
+
+  // Sorting logic for Load Balancer: Lowest Latency First
+  if (Object.keys(reviewerStats).length > 0) {
+    return reviewers.sort((a, b) => {
+      const latencyA = reviewerStats[a]?.avgLatencySeconds || 999999;
+      const latencyB = reviewerStats[b]?.avgLatencySeconds || 999999;
+      return latencyA - latencyB;
+    });
+  }
+
+  return reviewers;
 }

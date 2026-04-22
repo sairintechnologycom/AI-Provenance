@@ -1,5 +1,5 @@
 import { getExecOutput } from '@actions/exec';
-import { verifyAIGeneration } from './llm-verifier.js';
+import { verifyAnalysis } from './verifier.js';
 
 /**
  * Detection Engine Namespace
@@ -50,17 +50,21 @@ const engine = {
   ],
 
   /**
-   * Detects "pasted boilerplate" style by checking for high density of typical AI scaffolding names.
+   * Detects "pasted boilerplate" style by checking for high density of typical AI scaffolding names
+   * relative to total unique identifiers in the diff.
    */
-  calculateBoilerplateDensity: (diff) => {
+  calculateBoilerplateRatio: (diff) => {
     const keywords = ['Factory', 'Service', 'Controller', 'Manager', 'Repository', 'Interface', 'Adapter', 'Provider'];
-    let count = 0;
-    for (const kw of keywords) {
-      const reg = new RegExp(`\\w+${kw}`, 'g');
-      const matches = diff.match(reg);
-      if (matches) count += matches.length;
+    const identifiers = diff.match(/[A-Z][a-zA-Z0-9]{3,}/g) || [];
+    if (identifiers.length === 0) return 0;
+
+    let bpCount = 0;
+    for (const id of identifiers) {
+      if (keywords.some(kw => id.endsWith(kw))) {
+        bpCount++;
+      }
     }
-    return count;
+    return bpCount / identifiers.length;
   },
 
   /**
@@ -108,12 +112,12 @@ const engine = {
 
         // 3.1 Structural Complexity / Boilerplate Density
         // If we see high density of "Textbook" names in a diff, bump confidence
-        const boilerplateCount = engine.calculateBoilerplateDensity(diff);
-        if (boilerplateCount > 5) {
-          const bpConfidence = Math.min(60, boilerplateCount * 8);
+        const boilerplateRatio = engine.calculateBoilerplateRatio(diff);
+        if (boilerplateRatio > 0.15) {
+          const bpConfidence = Math.min(60, Math.round(boilerplateRatio * 200));
           if (bpConfidence > confidence) {
             confidence = bpConfidence;
-            methods.push('structure:high-boilerplate-density');
+            methods.push('structure:high-boilerplate-ratio');
           }
         }
       }
@@ -191,20 +195,7 @@ const engine = {
     });
 
     // 3. Optional LLM Verification for inferred results
-    if (process.env.ENABLE_LLM_VERIFICATION === 'true' && analysis.confidence > 0 && analysis.confidence < 100) {
-      try {
-        const verification = await verifyAIGeneration(diff, analysis.confidence, analysis.methods);
-        if (verification.verified) {
-          analysis.confidence = verification.verifiedConfidence;
-          analysis.methods.push(`llm-verified:${verification.consensus.toLowerCase()}`);
-          analysis.verificationReason = verification.reason;
-        }
-      } catch (err) {
-        console.error(`[Detection Engine] LLM Verification failed: ${err.message}`);
-      }
-    }
-
-    return analysis;
+    return await verifyAnalysis(diff, analysis);
   }
 };
 

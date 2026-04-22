@@ -112,21 +112,23 @@ model Repository {
 }
 
 model PullRequest {
-  id           String            @id @default(cuid())
-  githubId     String            @unique
-  number       Int
-  repositoryId String
-  status       String            @default("PENDING")
-  aiTool       String?
-  confidence   Int?
-  approvalNote String?
-  merged       Boolean           @default(false)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  analysisJobs AnalysisJob[]
-  packet       MergeBriefPacket?
-  repository   Repository        @relation(fields: [repositoryId], references: [id])
-  reviewEvents ReviewEvent[]
+  id             String            @id @default(cuid())
+  githubId       String            @unique
+  number         Int
+  repositoryId   String
+  status         String            @default("PENDING")
+  aiTool         String?
+  confidence     Int?
+  approvalNote   String?
+  merged         Boolean           @default(false)
+  latencySeconds Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  
+  analysisJobs   AnalysisJob[]
+  packet         MergeBriefPacket?
+  repository     Repository        @relation(fields: [repositoryId], references: [id])
+  reviewEvents   ReviewEvent[]
 
   @@unique([repositoryId, number])
 }
@@ -152,7 +154,7 @@ model MergeBriefPacket {
   aiTool              String?
   confidence          Int?
   filesChangedCount   Int?
-  rawPayload          String?
+  rawPayload          Json?
   createdAt           DateTime                   @default(now())
   updatedAt           DateTime                   @updatedAt
   slackSentAt         DateTime?

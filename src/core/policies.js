@@ -1,60 +1,47 @@
-import { minimatch } from 'minimatch';
-
 /**
- * Gating Policy Engine
- * Determines if a Pull Request should be blocked or flagged based on AI presence.
+ * Policy-as-Code engine for MergeBrief.
+ * Parses .mergebrief.yml from repositories to determine governance rules.
  */
+import yaml from 'js-yaml';
 
-const DEFAULT_POLICY = {
-  blockThreshold: 90, // Block if confidence > 90%
-  warnThreshold: 50,  // Warn if confidence > 50%
-  criticalPaths: [
-    '**/auth/**',
-    '**/billing/**',
-    '**/security/**',
-    '**/crypto/**',
-    'src/core/gating.js',
-    'prisma/schema.prisma'
-  ],
-  strictMode: false // If true, blockThreshold drops to 70 for critical paths
+export const DEFAULT_POLICY = {
+  requireAIVerification: true,
+  boilerplateRatioThreshold: 0.15,
+  autoApproveTrivial: true,
+  highRiskPaths: ['src/auth/**', 'src/billing/**', 'infrastructure/**', '.github/**'],
+  labels: {
+    triage: true,
+    confidence: true
+  }
 };
 
 /**
- * Evaluates a set of files and analysis results against a policy.
- * @returns { action: 'BLOCK' | 'WARN' | 'ALLOW', reason: string }
+ * Fetches and evaluates the policy for a given repository.
  */
-export function evaluatePolicy(analysis, files, orgPolicy = DEFAULT_POLICY) {
-  const { confidence, aiTool } = analysis;
-  
-  // 1. Check for critical path violations
-  const changedFiles = Array.isArray(files) ? files.map(f => f.filename) : [];
-  const hitCriticalPath = changedFiles.some(file => 
-    orgPolicy.criticalPaths.some(pattern => minimatch(file, pattern))
-  );
+export async function evaluatePolicy(octokit, owner, repo) {
+  try {
+    const { data } = await octokit.rest.repos.getContent({
+      owner,
+      repo,
+      path: '.mergebrief.yml'
+    });
 
-  const effectiveBlockThreshold = (orgPolicy.strictMode && hitCriticalPath) 
-    ? Math.max(20, orgPolicy.blockThreshold - 20) 
-    : orgPolicy.blockThreshold;
-
-  if (confidence >= effectiveBlockThreshold) {
-    if (hitCriticalPath) {
-      return { 
-        action: 'BLOCK', 
-        reason: `AI-generated code (${aiTool}, ${confidence}%) detected in critical paths: ${changedFiles.filter(f => orgPolicy.criticalPaths.some(p => minimatch(f, p))).join(', ')}` 
+    if (data && data.content) {
+      const content = Buffer.from(data.content, 'base64').toString();
+      const userPolicy = yaml.load(content);
+      
+      return {
+        ...DEFAULT_POLICY,
+        ...userPolicy,
+        // Deep merge labels if needed
+        labels: { ...DEFAULT_POLICY.labels, ...(userPolicy.labels || {}) }
       };
     }
-    return { 
-      action: 'BLOCK', 
-      reason: `High confidence AI-generated code detected (${confidence}%). Threshold is ${effectiveBlockThreshold}%.` 
-    };
+  } catch (error) {
+    if (error.status !== 404) {
+       console.error(`[PolicyEngine] Error fetching policy from ${owner}/${repo}: ${error.message}`);
+    }
   }
 
-  if (confidence >= orgPolicy.warnThreshold) {
-    return { 
-      action: 'WARN', 
-      reason: `Potential AI-generated code detected (${confidence}%). Review required.` 
-    };
-  }
-
-  return { action: 'ALLOW', reason: 'No significant AI presence detected or below thresholds.' };
+  return DEFAULT_POLICY;
 }

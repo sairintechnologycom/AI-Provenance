@@ -1,28 +1,38 @@
 # MergeBrief
 
-**The Proof of Human Intelligence.**
+**PR Governance for AI-era Velocity.**
 
-MergeBrief is an AI provenance detection engine and governance toolkit designed to identify, track, and govern AI-generated code. It analyzes git commits for known AI artifacts, heuristics, and semantic patterns, providing organization-wide visibility while preserving human accountability in the loop.
+MergeBrief is the governance control plane for enterprise engineering teams. It transforms AI detection into active governance, allowing teams to triage AI-assisted PRs, balance reviewer loads based on performance, and enforce policy-as-code at scale.
 
-## 🚀 Deployment Modes
-MergeBrief adapts to your engineering workflow with four flexible levels of integration:
+## 🚀 Key Governance Features
+
+MergeBrief moves beyond simple detection to active PR orchestration:
+
+- **Agentic PR Triage**: Automatically classify PRs as Trivial, Standard, or High-Risk. Save hundreds of hours by auto-approving safe, non-critical changes.
+- **Reviewer Load Balancer**: Route high-risk AI code to the most responsive experts. Performance metrics weight reviewer suggestions by historical turnaround latency.
+- **Blast Radius Graph**: Understand logical ripple effects with dependency-aware impact analysis. See exactly which services are impacted by an AI suggestion.
+- **Policy-as-Code**: Define governance rules in `.mergebrief.yml`. Enforce organization-wide standards with per-repository overrides.
+- **AI Provenance Engine 2.0**: Deep deterministic and semantic analysis to identify likely AI authorship with high-fidelity scoring.
+
+## 📦 Deployment Modes
+MergeBrief adapts to your engineering workflow with several integration levels:
 
 | Mode | Deployment | Best For | Key Features |
 | :--- | :--- | :--- | :--- |
+| **MergeBrief (App)**| Express + pg-boss | **Enterprise** | **Triage**, **Load Balancing**, **Blast Radius**, **Policy-as-Code**. |
 | **CLI** | Local / Script | Ad-hoc audits | JSON output, no server required. |
 | **GitHub Action** | `.github/workflows` | Single Repo | Job Summaries, Zero-config. |
 | **Azure DevOps** | `azure-pipelines.yml` | Enterprise CI | Native Build Results integration. |
-| **MergeBrief (SaaS)**| Express + Postgres | Organizations | **Human-in-the-Loop**, Status Checks, Intent Engine. |
 
 ---
 
 ## ⚡ Quick Start (Interactive Demo)
 
-Experience MergeBrief in 60 seconds without any configuration:
+Experience the Governance Control Plane in 60 seconds:
 
 1. **Setup**: `npm install && npx prisma migrate dev`
 2. **Launch Demo**: `npm run demo`
-3. **Explore**: Open [http://localhost:3001/?demo=true](http://localhost:3001/?demo=true)
+3. **Explore**: Open [http://localhost:3000/?demo=true](http://localhost:3000/?demo=true)
 
 For a step-by-step walkthrough of the features, see the [**Guided Tour**](docs/GUIDED_TOUR.md).
 

@@ -35,6 +35,36 @@ export default function createApiRouter(githubApp) {
   });
 
   /**
+   * GET /api/governance/stats
+   * Aggregated metrics for the Governance Dashboard.
+   */
+  router.get('/governance/stats', checkDb, async (req, res) => {
+    try {
+      const totalPrs = await prisma.pullRequest.count();
+      const avgLatency = await prisma.pullRequest.aggregate({
+        _avg: { latencySeconds: true },
+        where: { latencySeconds: { not: null } }
+      });
+
+      const triageDistribution = await prisma.mergeBriefPacket.groupBy({
+        by: ['aiTool'], // Temporarily using aiTool as a proxy or we can use PacketTag if triage is stored there
+        // Actually, we should probably check packet summaries or tags.
+        // For Tier 1, let's just return the latency stats.
+        _count: { id: true }
+      });
+
+      res.json({
+        totalPrs,
+        avgLatencySeconds: Math.round(avgLatency._avg.latencySeconds || 0),
+        status: 'Operational'
+      });
+    } catch (error) {
+      console.error('[API] Governance stats error:', error.message);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  /**
    * GET /api/repos/:owner/:repo/pulls
    * Returns list of PRs for a specific repo.
    */

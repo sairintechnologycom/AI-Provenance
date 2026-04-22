@@ -5,13 +5,17 @@ import Link from 'next/link';
 
 export default function Dashboard() {
   const [repos, setRepos] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/repos')
-      .then(res => res.json())
-      .then(data => {
-        setRepos(data);
+    Promise.all([
+      fetch('/api/repos').then(res => res.json()),
+      fetch('/api/governance/stats').then(res => res.json())
+    ])
+      .then(([reposData, statsData]) => {
+        setRepos(reposData);
+        setStats(statsData);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -24,7 +28,7 @@ export default function Dashboard() {
           <div className="absolute inset-0 rounded-full border-4 border-primary/20"></div>
           <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
         </div>
-        <p className="text-white/40 font-medium animate-pulse">Syncing repositories...</p>
+        <p className="text-white/40 font-medium animate-pulse">Syncing Governance Data...</p>
       </div>
     );
   }
@@ -33,12 +37,25 @@ export default function Dashboard() {
     <div className="space-y-10 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight text-white">Project Overview</h2>
-          <p className="text-white/50">Monitoring AI provenance across {repos.length} active repositories.</p>
+          <h2 className="text-3xl font-bold tracking-tight text-white">Governance Control Plane</h2>
+          <p className="text-white/50">Monitoring AI provenance and orchestrating PR velocity.</p>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-          LIVE ANALYSIS ENABLED
+        <div className="flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-6 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 shadow-inner">
+             <div className="text-center">
+                <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">Avg Latency</p>
+                <p className="text-lg font-bold text-primary">{stats?.avgLatencySeconds || 0}s</p>
+             </div>
+             <div className="w-px h-8 bg-white/10"></div>
+             <div className="text-center">
+                <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">PRs Tracked</p>
+                <p className="text-lg font-bold text-white">{stats?.totalPrs || 0}</p>
+             </div>
+          </div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            {stats?.status || 'OPERATIONAL'}
+          </div>
         </div>
       </div>
       
