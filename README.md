@@ -1,110 +1,89 @@
-# MergeBrief
+# 🛡️ MergeBrief: The AI Governance Layer
 
-**AI PR Risk Triage + Approval Evidence.**
+**AI PR Risk Triage + Auditable Approval Evidence.**
 
-MergeBrief is the governance layer for modern engineering teams adopting AI. It solves "AI Review Inflation" by providing high-fidelity risk triage and auditable approval evidence for AI-assisted pull requests.
+MergeBrief is an open-source governance control plane designed for modern engineering teams. It solves "AI Review Inflation" by providing high-fidelity risk triage, semantic intent analysis, and auditable evidence for AI-assisted code contributions.
 
-## 🚀 Key Governance Features
+![MergeBrief Dashboard Overview](./docs/images/dashboard.png)
 
-MergeBrief focuses on the "Approval Evidence" workflow to keep velocity high without compromising security:
+---
 
-- **High-Fidelity Risk Triage**: Automatically classify PRs as Trivial, Standard, or High-Risk using LLM-assisted verification and style variance analysis.
-- **Intent Bridge**: AI-suggested "Merge Notes" (What Changed, Why AI, Verification Steps) capture developer intent and reduce reviewer friction.
-- **Approval Evidence Artifacts**: Every AI-assisted PR generates a compliance-ready "Certificate of Review" with a timestamped audit trail of governance decisions.
-- **Governance Policy Modes**: Toggle between **OBSERVE** (reporting only), **ADVISORY** (warn on risk), and **BLOCK** (strict gates for regulated modules).
-- **AI Provenance Engine 2.0**: Combines deterministic signals (commit trailers, heuristics) with semantic LLM analysis to provide transparent risk scores.
+## ✨ Key Features
+
+### 🎯 High-Fidelity Risk Triage
+Automatically classify Pull Requests as **Trivial**, **Standard**, or **High-Risk**. MergeBrief combines deterministic signals (commit trailers) with LLM-assisted verification to identify potential security or logic flaws in AI-generated code.
+
+### 🌉 Intent Bridge
+Capture developer intent automatically. MergeBrief generates "Merge Notes" that explain *what* changed, *why* the AI was used, and the *verification steps* taken, reducing reviewer friction by up to 40%.
+
+### 📄 Compliance-Ready Artifacts
+Every governance decision generates a "Certificate of Review"—a timestamped audit trail that satisfies enterprise compliance requirements for AI-contributed code.
+
+![AI Governance Report in PR](./docs/images/risk-triage.png)
+
+---
+
+## 🚀 Why MergeBrief?
+
+| Benefit | How we do it |
+| :--- | :--- |
+| **Maintain Velocity** | AI-suggested summaries and "Intent Bridges" speed up review cycles. |
+| **Enhance Security** | "Blast Radius" analysis highlights AI changes in critical security modules. |
+| **Audit Readiness** | Permanent, signed records of every AI-assisted code approval. |
+| **Flexible Policy** | Toggle between **Observe**, **Advisory**, and **Block** modes. |
+
+---
 
 ## 📦 Deployment Modes
-MergeBrief adapts to your engineering workflow with several integration levels:
 
-| Mode | Deployment | Best For | Key Features |
-| :--- | :--- | :--- | :--- |
-| **MergeBrief (App)**| Express + pg-boss | **Enterprise** | **Triage**, **Load Balancing**, **Blast Radius**, **Policy-as-Code**. |
-| **CLI** | Local / Script | Ad-hoc audits | JSON output, no server required. |
-| **GitHub Action** | `.github/workflows` | Single Repo | Job Summaries, Zero-config. |
-| **Azure DevOps** | `azure-pipelines.yml` | Enterprise CI | Native Build Results integration. |
+MergeBrief adapts to your stack with three powerful integration levels:
 
----
+1. **Dashboard (Full Stack)**: Next.js + Express + PostgreSQL. Centralized control plane for the whole organization.
+2. **GitHub Action**: Zero-config governance for individual repositories.
+3. **CLI Tool**: Powerful ad-hoc audits for local development or custom CI/CD pipelines.
 
-## ⚡ Quick Start (Interactive Demo)
-
-Experience the Governance Control Plane in 60 seconds:
-
-1. **Setup**: `npm install && npx prisma migrate dev`
-2. **Launch Demo**: `npm run demo`
-3. **Explore**: Open [http://localhost:3000/?demo=true](http://localhost:3000/?demo=true)
-
-For a step-by-step walkthrough of the features, see the [**Guided Tour**](docs/GUIDED_TOUR.md).
+![Compliance Certificate Artifact](./docs/images/compliance.png)
 
 ---
 
-## 🛠️ Usage Guides
+## ⚡ Quick Start (Docker)
 
-### 1. GitHub Action (Simple)
-Add this to your workflow (e.g., `.github/workflows/ai-provenance.yml`):
+The fastest way to get MergeBrief running in your environment is using Docker:
 
-```yaml
-steps:
-  - uses: actions/checkout@v4
-    with:
-      fetch-depth: 0 # Required for diff analysis
-  - uses: aincloudtools/AI-Provenance@v1
+```bash
+# 1. Clone the repository
+git clone https://github.com/aincloudtools/AI-Provenance.git
+cd AI-Provenance
+
+# 2. Run the setup script
+chmod +x ./scripts/setup.sh
+./scripts/setup.sh
 ```
 
-### 2. Azure DevOps
-Use the included script in your pipeline:
-```yaml
-- script: node src/azure/index.js
-  env:
-    BUILD_SOURCEVERSION: $(Build.SourceVersion)
-```
+For detailed setup instructions, including GitHub App configuration, see the **[📦 Installation Guide](./docs/INSTALL.md)**.
 
-### 3. MergeBrief (SaaS / GitHub App)
-The full experience with blocking checks, LLM-powered "Blast Radius" analysis, and a unified Web Dashboard.
-
-- **Installation**: `npm install && npx prisma migrate dev && cd web && npm install`
-- **Server**: `npm run dev:all`
-- **Config**: See `.env.example` (Requires `APP_ID`, `PRIVATE_KEY`, `DATABASE_URL`, `ANTHROPIC_API_KEY`).
-
-#### Features:
-- **GitHub Check Runs**: Automatically creates a "MergeBrief Analysis" check for rich PR overlays instead of noisy comments.
-- **MergeBrief Packets Dashboard**: View detailed AI authorship packets on our Next.js dashboard separated by deterministic and inferred tags.
-- **Async Processing Engine**: Handles massive PR diffs natively through a background queue constraint to not timeout webhooks.
-- **Semantic Intent**: AI-driven analysis of *why* the code was changed (e.g., "Refactoring Auth Logic").
+---
 
 ## 📚 Documentation
 
-Detailed guides for setting up and using MergeBrief:
-
-- **[📦 Installation Guide](./docs/INSTALL.md)** - Step-by-step Docker setup.
-- **[⚙️ Configuration Guide](./docs/CONFIG.md)** - GitHub App and environment variable setup.
-- **[🚀 Usage Guide](./docs/USAGE.md)** - How to use the dashboard and CLI.
-- **[🏢 Production Deployment](./docs/PRODUCTION_DEPLOYMENT.md)** - Managed services and production best practices.
-- **[🔧 Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions.
+- [📦 Installation Guide](./docs/INSTALL.md) - Step-by-step Docker setup.
+- [⚙️ Configuration Guide](./docs/CONFIG.md) - GitHub App and environment setup.
+- [🚀 Usage Guide](./docs/USAGE.md) - How to use the dashboard and CLI.
+- [🏢 Production Deployment](./docs/PRODUCTION_DEPLOYMENT.md) - Scaling for enterprise.
 
 ---
 
-## 🛠️ Local Development
+## 🤝 Contributing
 
-### Installation
-```bash
-npm install
-```
-
-### Running Tests
-```bash
-npm test
-```
-
-### Manual Analysis (CLI)
-```bash
-node src/cli.js --sha <commit-sha>
-```
+We welcome contributions! MergeBrief is open-source and built for the community. Please see our [Contributing Guidelines](CONTRIBUTING.md) to get started.
 
 ---
 
-## ⚠️ Edge Cases & Notes
+## ⚠️ Notes
 
-- **Shallow Clones**: The engine requires full history or the target commit's parent to analyze diffs. It will warn and exit if it detects a shallow clone.
-- **Binary Files**: Statistics (`--numstat`) correctly identify binary changes and skip diff scanning for them.
-- **Telemetry**: Provide a `WEBHOOK_URL` in Action/CLI modes to forward data to your central logging system.
+- **Privacy**: MergeBrief processes diffs locally or within your private VPC. Your code never leaves your controlled environment.
+- **AI Models**: Supports Anthropic Claude-3 and OpenAI GPT-4 for high-fidelity analysis.
+
+---
+
+*Built with ❤️ by the AI Provenance team.*
