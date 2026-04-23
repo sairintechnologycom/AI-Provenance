@@ -1,52 +1,57 @@
-# User Guide: AI Provenance & MergeBrief
+# 🚀 Usage Guide
 
-This guide explains how developers and reviewers interact with the **MergeBrief** AI Provenance system.
+Once MergeBrief is installed and configured, follow these steps to start governing your AI-generated code.
 
-## 🤖 Detection & Summaries
+## 1. Connecting a Repository
 
-When you open or update a Pull Request, MergeBrief automatically analyzes each commit. If AI-generated code is detected, it posts a summary comment:
+1. Navigate to your MergeBrief Dashboard ([http://localhost:3001](http://localhost:3001)).
+2. Log in with your GitHub account.
+3. Click on **Install App** to select the repositories you want to monitor.
+4. Once installed, the repositories will appear in your dashboard.
 
-### AI Metrics Table
-| Commit | AI Tool | Confidence | Files | Added | Removed |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `a2b3c4` | **Copilot** | 100% | 3 | 120 | 5 |
+## 2. Setting Up Governance Policies
 
-### 🎯 Semantic Intents
-MergeBrief uses an LLM-powered engine to understand *why* the AI code was added:
-- "Identified logic for session expiration in `auth.js`."
-- "Updated database schema migrations for user profiles."
+Navigate to the **Settings** tab for a repository to configure:
 
-### ⚠️ Risk Areas (Blast Radius)
-It highlights critical files touched by AI that require extra scrutiny:
-- `app/api/auth.js`
-- `config/settings.json`
+- **Strict Mode**: Automatically fail PRs that contain unverified AI code.
+- **Reviewer Assignment**: Automatically add a human reviewer if AI code exceeds a certain threshold.
+- **Exclusion Patterns**: Ignore specific files (e.g., documentation, vendor folders) from analysis.
 
----
+## 3. Detecting AI Code in Pull Requests
 
-## ✅ Human-in-the-Loop Approval
+MergeBrief analyzes every commit in a Pull Request. To explicitly mark code as AI-generated, contributors should use the Git Trailer:
 
-One of the core features of MergeBrief is the **Blocking Gate**. If AI-generated code is detected, a mandatory status check called **MergeBrief Approval** will mark the PR as `pending`.
+```text
+Commit message body...
 
-### How to Approve AI Code
-To clear the gate and allow the PR to be merged, a repository maintainer (with `write` access) must review the AI code and provide a rationale.
+AI-generated-by: Claude-3-Opus
+```
 
-**Command**: `/merge-brief-approve: <your-rationale>`
+### Dashboard Insights
 
-**Example**:
-> `/merge-brief-approve: I have verified the AI-generated auth logic and added missing edge-case unit tests.`
+- **Provenance Score**: A high-level metric indicating the percentage of AI code in the PR.
+- **Risk Triage**: Identifies potential security or licensing issues in AI-contributed blocks.
+- **Audit Log**: A permanent record of all AI code detections for compliance.
 
-### What Happens Next?
-1. **Status Cleared**: The status check turns to `success`.
-2. **Telemetry Ingested**: Your rationale and the AI detection metrics are saved to the project's database for long-term reporting.
-3. **Confirmation**: MergeBrief will post a confirmation comment acknowledging the approval.
+## 4. Using the CLI (Developer Tool)
 
----
+Developers can verify their code locally before pushing to GitHub:
 
-## 💡 Best Practices for AI Code
+```bash
+# Install the CLI tool
+npm install -g mergebrief
 
-- **Review the Diffs**: Always double-check AI-generated logic for subtle bugs or security vulnerabilities.
-- **Add Git Trailers**: You can help MergeBrief by adding git trailers to your commits:
+# Analyze the current directory
+mergebrief detect .
+
+# Analyze a specific PR
+mergebrief analyze --pr 42
+```
+
+## 5. Monitoring and Logs
+
+- **Dashboard**: Real-time overview of all active PRs.
+- **Docker Logs**: Check background job progress.
   ```bash
-  git commit -m "feat: add oauth support" -m "AI-generated-by: Copilot"
+  docker compose logs -f backend
   ```
-- **Provide Rationale**: When approving AI code, be specific. This helps your team build a high-quality "AI Provenance" history.

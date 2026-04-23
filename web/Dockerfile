@@ -1,30 +1,39 @@
 # Build stage
 FROM node:20-slim AS builder
 
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy root prisma for client generation
-COPY ../prisma ./prisma
-COPY ../package*.json ./
+# Copy root files for prisma
+COPY prisma ./prisma/
+COPY package*.json ./
 
-# Copy web package files
-COPY package*.json ./web/
+# Copy web files
+COPY web/package*.json ./web/
 
-# Install dependencies
+# Install root dependencies (for prisma)
 RUN npm ci
+
+# Install web dependencies
 RUN cd web && npm ci
 
 # Copy web source code
-COPY . ./web/
+COPY web ./web/
 
 # Generate Prisma client
 RUN npx prisma generate
 
 # Build Next.js
+# We need to pass build-time env vars if any, but for now we assume runtime env
 RUN cd web && npm run build
 
 # Final stage
 FROM node:20-slim
+
+# Install OpenSSL for Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

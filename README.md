@@ -72,12 +72,15 @@ The full experience with blocking checks, LLM-powered "Blast Radius" analysis, a
 - **Async Processing Engine**: Handles massive PR diffs natively through a background queue constraint to not timeout webhooks.
 - **Semantic Intent**: AI-driven analysis of *why* the code was changed (e.g., "Refactoring Auth Logic").
 
----
+## 📚 Documentation
 
-## 📖 Deep Dives
+Detailed guides for setting up and using MergeBrief:
 
-- [**Developer Setup Guide**](docs/development.md): Hosting your own MergeBrief instance.
-- [**End-User Guide**](docs/usage.md): How to use the AI approval commands and interpret metrics.
+- **[📦 Installation Guide](./docs/INSTALL.md)** - Step-by-step Docker setup.
+- **[⚙️ Configuration Guide](./docs/CONFIG.md)** - GitHub App and environment variable setup.
+- **[🚀 Usage Guide](./docs/USAGE.md)** - How to use the dashboard and CLI.
+- **[🏢 Production Deployment](./docs/PRODUCTION_DEPLOYMENT.md)** - Managed services and production best practices.
+- **[🔧 Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions.
 
 ---
 

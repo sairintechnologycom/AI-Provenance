@@ -11,8 +11,24 @@ services:
       POSTGRES_DB: ${DB_NAME:-mergebrief}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mergebrief -d mergebrief"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Database Setup & Migrations
+  setup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mergebrief}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-mergebrief}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate deploy && npx prisma db seed"
 
   # MergeBrief Backend Service
   backend:
@@ -29,13 +45,14 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
+      setup:
+        condition: service_completed_successfully
 
-  # MergeBrief Dashboard (Optional for self-hosters)
+  # MergeBrief Dashboard
   dashboard:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: web/Dockerfile
     restart: always
     ports:
       - "3001:3001"
@@ -44,10 +61,12 @@ services:
       NODE_ENV: production
       BACKEND_API_URL: http://backend:3000
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
+      PORT: 3001
     env_file:
       - .env
     depends_on:
-      - backend
+      setup:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
