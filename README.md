@@ -1,8 +1,8 @@
 # 🛡️ MergeBrief: The AI Governance Layer
 
-**AI PR Risk Triage + Auditable Approval Evidence.**
+**PR Governance for AI-Era Velocity.**
 
-MergeBrief is an open-source governance control plane designed for modern engineering teams. It solves "AI Review Inflation" by providing high-fidelity risk triage, semantic intent analysis, and auditable evidence for AI-assisted code contributions.
+MergeBrief is an open-source governance control plane designed for modern engineering teams. It solves "AI Review Inflation" by providing high-fidelity risk triage, semantic intent analysis, and auditable approval workflows for AI-assisted code contributions.
 
 ![MergeBrief Dashboard Overview](./docs/images/dashboard.png)
 
@@ -11,15 +11,13 @@ MergeBrief is an open-source governance control plane designed for modern engine
 ## ✨ Key Features
 
 ### 🎯 High-Fidelity Risk Triage
-Automatically classify Pull Requests as **Trivial**, **Standard**, or **High-Risk**. MergeBrief combines deterministic signals (commit trailers) with LLM-assisted verification to identify potential security or logic flaws in AI-generated code.
+Automatically classify Pull Requests as **Trivial**, **Standard**, or **High-Risk**. MergeBrief analyzes AI authorship (e.g., 84% AI-generated) and highlights critical risk areas like **Auth** and **Database** changes before a human even opens the PR.
 
-### 🌉 Intent Bridge
-Capture developer intent automatically. MergeBrief generates "Merge Notes" that explain *what* changed, *why* the AI was used, and the *verification steps* taken, reducing reviewer friction by up to 40%.
+### 🌉 Intent Bridge & Evidence
+Capture developer intent automatically. MergeBrief provides "Evidence" for AI-generated scaffolding, ensuring that reviewers understand *why* the AI was used and what verification steps were taken.
 
-### 📄 Compliance-Ready Artifacts
-Every governance decision generates a "Certificate of Review"—a timestamped audit trail that satisfies enterprise compliance requirements for AI-contributed code.
-
-![AI Governance Report in PR](./docs/images/risk-triage.png)
+### 🏢 Enterprise Policy Engine
+Enforce governance at scale. Toggle between **Observe**, **Advisory**, and **Block** modes to ensure that high-risk AI code never reaches production without mandatory human verification.
 
 ---
 
@@ -27,10 +25,10 @@ Every governance decision generates a "Certificate of Review"—a timestamped au
 
 | Benefit | How we do it |
 | :--- | :--- |
-| **Maintain Velocity** | AI-suggested summaries and "Intent Bridges" speed up review cycles. |
-| **Enhance Security** | "Blast Radius" analysis highlights AI changes in critical security modules. |
-| **Audit Readiness** | Permanent, signed records of every AI-assisted code approval. |
-| **Flexible Policy** | Toggle between **Observe**, **Advisory**, and **Block** modes. |
+| **Maintain Velocity** | AI-assisted triage and "Merge Notes" speed up review cycles. |
+| **Enhance Security** | Automatic detection of AI-generated changes in sensitive modules. |
+| **Audit Readiness** | Permanent, searchable records of every AI-assisted code approval. |
+| **Open Source** | Self-hosted, privacy-first governance that keeps your code in your VPC. |
 
 ---
 
@@ -42,8 +40,6 @@ MergeBrief adapts to your stack with three powerful integration levels:
 2. **GitHub Action**: Zero-config governance for individual repositories.
 3. **CLI Tool**: Powerful ad-hoc audits for local development or custom CI/CD pipelines.
 
-![Compliance Certificate Artifact](./docs/images/compliance.png)
-
 ---
 
 ## ⚡ Quick Start (Docker)
@@ -52,7 +48,7 @@ The fastest way to get MergeBrief running in your environment is using Docker:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/aincloudtools/AI-Provenance.git
+git clone https://github.com/sairintechnologycom/AI-Provenance.git
 cd AI-Provenance
 
 # 2. Run the setup script
