@@ -38,9 +38,9 @@ else
   echo "ℹ️  .env file already exists, skipping creation."
 fi
 
-echo ""
-echo "📦 Building and starting MergeBrief containers..."
-docker compose up -d --build
+echo "📦 Building and starting MergeBrief containers (using classic builder)..."
+# Force classic builder to avoid gRPC session errors on some macOS Docker versions
+DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker compose up -d --build
 
 echo ""
 echo "🎉 Setup complete! MergeBrief is starting up."

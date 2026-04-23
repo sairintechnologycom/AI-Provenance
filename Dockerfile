@@ -16,8 +16,9 @@ RUN npm ci
 # Generate Prisma client
 RUN npx prisma generate
 
-# Copy source code
+# Copy source code and scripts
 COPY src ./src
+COPY scripts ./scripts
 
 # Final stage
 FROM node:20-slim
@@ -30,6 +31,7 @@ WORKDIR /app
 # Copy built assets and dependencies
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
