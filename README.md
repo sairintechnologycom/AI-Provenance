@@ -1,18 +1,18 @@
 # MergeBrief
 
-**PR Governance for AI-era Velocity.**
+**AI PR Risk Triage + Approval Evidence.**
 
-MergeBrief is the governance control plane for enterprise engineering teams. It transforms AI detection into active governance, allowing teams to triage AI-assisted PRs, balance reviewer loads based on performance, and enforce policy-as-code at scale.
+MergeBrief is the governance layer for modern engineering teams adopting AI. It solves "AI Review Inflation" by providing high-fidelity risk triage and auditable approval evidence for AI-assisted pull requests.
 
 ## 🚀 Key Governance Features
 
-MergeBrief moves beyond simple detection to active PR orchestration:
+MergeBrief focuses on the "Approval Evidence" workflow to keep velocity high without compromising security:
 
-- **Agentic PR Triage**: Automatically classify PRs as Trivial, Standard, or High-Risk. Save hundreds of hours by auto-approving safe, non-critical changes.
-- **Reviewer Load Balancer**: Route high-risk AI code to the most responsive experts. Performance metrics weight reviewer suggestions by historical turnaround latency.
-- **Blast Radius Graph**: Understand logical ripple effects with dependency-aware impact analysis. See exactly which services are impacted by an AI suggestion.
-- **Policy-as-Code**: Define governance rules in `.mergebrief.yml`. Enforce organization-wide standards with per-repository overrides.
-- **AI Provenance Engine 2.0**: Deep deterministic and semantic analysis to identify likely AI authorship with high-fidelity scoring.
+- **High-Fidelity Risk Triage**: Automatically classify PRs as Trivial, Standard, or High-Risk using LLM-assisted verification and style variance analysis.
+- **Intent Bridge**: AI-suggested "Merge Notes" (What Changed, Why AI, Verification Steps) capture developer intent and reduce reviewer friction.
+- **Approval Evidence Artifacts**: Every AI-assisted PR generates a compliance-ready "Certificate of Review" with a timestamped audit trail of governance decisions.
+- **Governance Policy Modes**: Toggle between **OBSERVE** (reporting only), **ADVISORY** (warn on risk), and **BLOCK** (strict gates for regulated modules).
+- **AI Provenance Engine 2.0**: Combines deterministic signals (commit trailers, heuristics) with semantic LLM analysis to provide transparent risk scores.
 
 ## 📦 Deployment Modes
 MergeBrief adapts to your engineering workflow with several integration levels:

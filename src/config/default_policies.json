@@ -1,0 +1,38 @@
+{
+  "STARTUP": {
+    "mode": "ADVISORY",
+    "requireAIVerification": true,
+    "boilerplateRatioThreshold": 0.25,
+    "autoApproveTrivial": true,
+    "highRiskPaths": [".github/**"],
+    "riskThresholds": {
+      "critical": 95,
+      "high": 85,
+      "maxCumulativeScore": 1000
+    }
+  },
+  "STANDARD": {
+    "mode": "ADVISORY",
+    "requireAIVerification": true,
+    "boilerplateRatioThreshold": 0.15,
+    "autoApproveTrivial": false,
+    "highRiskPaths": ["src/auth/**", "src/billing/**", "infrastructure/**", ".github/**"],
+    "riskThresholds": {
+      "critical": 90,
+      "high": 75,
+      "maxCumulativeScore": 500
+    }
+  },
+  "REGULATED": {
+    "mode": "BLOCK",
+    "requireAIVerification": true,
+    "boilerplateRatioThreshold": 0.1,
+    "autoApproveTrivial": false,
+    "highRiskPaths": ["src/**", "infrastructure/**", ".github/**", "migrations/**"],
+    "riskThresholds": {
+      "critical": 80,
+      "high": 60,
+      "maxCumulativeScore": 300
+    }
+  }
+}

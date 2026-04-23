@@ -160,6 +160,7 @@ model MergeBriefPacket {
   aiTool              String?
   confidence          Int?
   filesChangedCount   Int?
+  suggestedMergeNotes Json?
   rawPayload          Json?
   createdAt           DateTime                   @default(now())
   updatedAt           DateTime                   @updatedAt
@@ -188,6 +189,7 @@ model PacketRiskTag {
   type     String
   category String
   reason   String?
+  severity String?          @default("MEDIUM")
   packet   MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
 }
 
@@ -211,6 +213,7 @@ model PacketProvenanceEvidence {
   packetId   String
   file       String?
   method     String
+  type       String?          @default("DETERMINISTIC")
   confidence Int?
   reason     String?
   packet     MergeBriefPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)

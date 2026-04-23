@@ -5,6 +5,7 @@
 import yaml from 'js-yaml';
 
 export const DEFAULT_POLICY = {
+  mode: 'ADVISORY', // ADVISORY (Warn only), BLOCK (Can fail checks), OBSERVE (Pass only)
   requireAIVerification: true,
   boilerplateRatioThreshold: 0.15,
   autoApproveTrivial: true,
@@ -88,11 +89,22 @@ export function applyPolicy(packet, policy = DEFAULT_POLICY) {
     reasons.push('PR modifications affect high-criticality architectural systems.');
   }
 
-  const decision = reasons.length > 0 ? 'BLOCK' : 
+  let decision = reasons.length > 0 ? 'BLOCK' : 
                    (lineRisks.some(r => r.score >= (policy.riskThresholds?.high || 75)) ? 'WARN' : 'PASS');
   
   if (decision === 'WARN' && reasons.length === 0) {
     reasons.push(`Significant AI-assisted changes detected (scores >= ${policy.riskThresholds?.high || 75}).`);
+  }
+
+  // Apply Mode Overrides
+  if (policy.mode === 'OBSERVE') {
+    if (decision !== 'PASS') {
+       reasons.unshift(`[OBSERVE MODE] Decision would have been ${decision}.`);
+    }
+    decision = 'PASS';
+  } else if (policy.mode === 'ADVISORY' && decision === 'BLOCK') {
+    reasons.unshift(`[ADVISORY MODE] Blocking downgraded to WARN.`);
+    decision = 'WARN';
   }
 
   return {

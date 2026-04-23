@@ -138,6 +138,42 @@ export default function createApiRouter(githubApp) {
       res.status(500).json({ error: 'Internal Server Error' });
     }
   });
+  /**
+   * POST /api/repos/policy
+   * Updates policy for a repository.
+   */
+  router.post('/repos/policy', checkDb, async (req, res) => {
+    const { repoId, policy } = req.body;
+    if (!repoId || !policy) return res.status(400).json({ error: 'Missing repoId or policy' });
+
+    try {
+      await prisma.repository.update({
+        where: { id: repoId },
+        data: { policy }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  /**
+   * GET /api/repos/:owner/:repo
+   */
+  router.get('/repos/:owner/:repo', checkDb, async (req, res) => {
+    const result = RepoParamsSchema.safeParse(req.params);
+    if (!result.success) return res.status(400).json({ error: 'Invalid params' });
+
+    try {
+      const repo = await prisma.repository.findFirst({
+        where: { owner: result.data.owner, name: result.data.repo }
+      });
+      if (!repo) return res.status(404).json({ error: 'Not found' });
+      res.json(repo);
+    } catch (err) {
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
 
   /**
    * GET /api/repos/:owner/:repo/pulls/:number/packet

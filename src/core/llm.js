@@ -41,12 +41,21 @@ Your goal is to summarize the changes so a human reviewer knows exactly what is 
 
 Provide your analysis in the following JSON format:
 {
-  "intents": ["String summary of intent 1", "String summary of intent 2"],
-  "blastRadius": ["Area 1 (e.g. Auth, DB, UI)", "Area 2"],
-  "highRiskFiles": ["Specific file path or glob pattern (e.g. src/auth/*)"]
+  "summary": "One sentence high-level summary",
+  "intents": ["Technical intent 1", "Technical intent 2"],
+  "riskReasons": [
+    { "category": "Auth/Security/Performance", "reason": "Detailed explanation of why this is risky", "severity": "HIGH|MEDIUM|LOW" }
+  ],
+  "highRiskFiles": ["Specific file path or glob pattern"],
+  "suggestedMergeNotes": {
+    "whatChanged": "Summary of the actual logic change",
+    "whyAI": "Reasoning for using AI in this context (if applicable)",
+    "verificationSteps": ["Step 1", "Step 2"]
+  },
+  "triage": "CRITICAL|STANDARD|TRIVIAL"
 }
 
-Keep descriptions concise and technical. Focus on the 'Blast Radius'.
+Keep descriptions concise and technical.
 `;
 
   const userMessage = `

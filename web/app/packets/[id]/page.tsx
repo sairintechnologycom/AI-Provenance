@@ -234,6 +234,7 @@ export default async function PacketDetail({
               currentStatus={packet.pullRequest.status} 
               existingNote={packet.pullRequest.approvalNote} 
               isDemo={isDemo}
+              suggestedNotes={packet.suggestedMergeNotes ? JSON.parse(packet.suggestedMergeNotes) : null}
             />
           </div>
 
@@ -247,9 +248,12 @@ export default async function PacketDetail({
 
           <StyleMetrics styleVariance={packet.styleVariance} />
 
-          <section className="glass-card p-8 space-y-8">
+          <section className="glass-card p-8 space-y-8 border-t-4 border-primary shadow-[0_20px_50px_rgba(59,130,246,0.1)]">
             <div className="space-y-2">
-              <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest">AI Governance Score</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest">AI Governance Score</h3>
+                <span className="px-2 py-1 bg-primary/10 border border-primary/20 rounded text-[10px] font-black text-primary uppercase tracking-widest">Auditable</span>
+              </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-6xl font-black text-white">{packet.confidence || 0}%</span>
                 <span className="text-xs font-bold text-white/20 uppercase tracking-widest">Evidence</span>
@@ -267,10 +271,16 @@ export default async function PacketDetail({
                 {packet.provenanceEvidence?.map((ev: any) => (
                   <div key={ev.id} className="space-y-2">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-white/60 uppercase tracking-wider">{ev.method} Analysis</span>
+                      <div className="flex flex-col">
+                        <span className="text-white/60 uppercase tracking-wider">{ev.method}</span>
+                        <span className={`text-[8px] font-black tracking-widest ${ev.type === 'DETERMINISTIC' ? 'text-blue-400' : 'text-purple-400'}`}>
+                          {ev.type || 'DETERMINISTIC'}
+                        </span>
+                      </div>
                       <span className="text-primary">{ev.confidence}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    {ev.reason && <p className="text-[9px] text-white/30 italic leading-tight">{ev.reason}</p>}
+                    <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-primary shadow-[0_0_10px_rgba(59,130,246,0.5)] rounded-full transition-all duration-1000" 
                         style={{ width: `${ev.confidence}%` }}

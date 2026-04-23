@@ -31,8 +31,10 @@ export function buildPacket({
     
     // Convert core detect results to evidence format
     r.methods?.forEach(method => {
+      const isProbabilistic = method.startsWith('llm-verified') || method.startsWith('fingerprint') || method.startsWith('heuristic-explicit');
       provenanceEvidence.push({
         method,
+        type: isProbabilistic ? 'INFERRED' : 'DETERMINISTIC',
         confidence: r.confidence,
         file: r.file || null,
         reason: r.verificationReason || null
@@ -46,15 +48,29 @@ export function buildPacket({
   const formattedDeterministicTags = deterministicTags.map(tag => ({
     type: 'DETERMINISTIC',
     category: tag.category,
-    reason: tag.reason
+    reason: tag.reason,
+    severity: tag.severity || 'MEDIUM'
   }));
 
-  // Inferred Tags (Blast Radius) from Semantic Analysis
-  const inferredTags = semanticAnalysis?.blastRadius?.map(area => ({
+  // Inferred Tags (Risk Reasons) from Semantic Analysis
+  const inferredTags = semanticAnalysis?.riskReasons?.map(risk => ({
     type: 'INFERRED',
-    category: area,
-    reason: 'Derived from semantic analysis of the diff.'
+    category: risk.category,
+    reason: risk.reason,
+    severity: risk.severity || 'MEDIUM'
   })) || [];
+
+  // Fallback for old blastRadius format if needed
+  if (!inferredTags.length && semanticAnalysis?.blastRadius) {
+    semanticAnalysis.blastRadius.forEach(area => {
+      inferredTags.push({
+        type: 'INFERRED',
+        category: area,
+        reason: 'Derived from semantic analysis of the diff.',
+        severity: 'MEDIUM'
+      });
+    });
+  }
 
   const allTags = [...formattedDeterministicTags, ...inferredTags];
 
@@ -67,7 +83,7 @@ export function buildPacket({
     id: packetId,
     version: 1,
     status: 'COMPLETED',
-    summary: semanticAnalysis?.summary || 'Provenance analysis complete',
+    summary: semanticAnalysis?.summary || semanticAnalysis?.intents?.[0] || 'Provenance analysis complete',
     aiTool: primaryAiTool,
     confidence: maxConfidence,
     filesChangedCount,
@@ -79,6 +95,7 @@ export function buildPacket({
     shadowDeps,
     blastRadius: blastRadiusFiles,
     styleVariance,
+    suggestedMergeNotes: semanticAnalysis?.suggestedMergeNotes || null,
     rawPayload: JSON.stringify({ diffResults, semanticAnalysis, lineLevelRisks, shadowDeps, blastRadiusFiles, styleVariance })
   };
 

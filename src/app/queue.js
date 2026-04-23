@@ -260,8 +260,10 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   }
 
   // 3. Fetch Repository Context (Policy & Manifest)
-  const { fetchRepoPolicy } = await import('../core/policies.js');
-  const policy = await fetchRepoPolicy(octokit, owner, repo);
+  const { evaluatePolicy } = await import('../core/policies.js');
+  const filePolicy = await evaluatePolicy(octokit, owner, repo);
+  const dbPolicy = repoRecord?.policy || {};
+  const policy = { ...filePolicy, ...dbPolicy };
 
   let manifest = null;
   try {
@@ -511,6 +513,7 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
         headSha: pull_request.head.sha,
         baseSha: pull_request.base.sha,
         rawPayload: builtPacket.rawPayload,
+        suggestedMergeNotes: builtPacket.suggestedMergeNotes,
         
         tags: { create: builtPacket.tags },
         intents: { create: builtPacket.intents },
@@ -582,7 +585,18 @@ async function processJob({ octokit, payload, repoRecord, prRecord, checkRunId, 
   }
 
   if (builtPacket.summary) checkSummary += `\n> ${builtPacket.summary}\n`;
-  checkSummary += `\n[🔍 View Governance Details & Full Graph](${packetUrl})`;
+
+  if (builtPacket.suggestedMergeNotes) {
+    const notes = builtPacket.suggestedMergeNotes;
+    checkSummary += `\n#### 📝 Intent Bridge (Suggested Merge Notes)\n`;
+    checkSummary += `**What Changed**: ${notes.whatChanged}\n`;
+    if (notes.whyAI) checkSummary += `**Why AI**: ${notes.whyAI}\n`;
+    if (notes.verificationSteps?.length > 0) {
+      checkSummary += `**Verification**: \n${notes.verificationSteps.map(s => `- [ ] ${s}`).join('\n')}\n`;
+    }
+  }
+
+  checkSummary += `\n[🔍 View Governance Details & Full Evidence Artifact](${packetUrl})`;
 
   await updateCheckRun(octokit, {
     owner, repo, check_run_id: checkRunId,

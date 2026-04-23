@@ -3,7 +3,19 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export default function MergeNoteForm({ packetId, existingNote, currentStatus, isDemo }: { packetId: string, existingNote?: string, currentStatus: string, isDemo?: boolean }) {
+export default function MergeNoteForm({ 
+  packetId, 
+  existingNote, 
+  currentStatus, 
+  isDemo,
+  suggestedNotes 
+}: { 
+  packetId: string, 
+  existingNote?: string, 
+  currentStatus: string, 
+  isDemo?: boolean,
+  suggestedNotes?: { whatChanged: string, whyAI: string, verificationSteps: string[] }
+}) {
   const [note, setNote] = useState(existingNote || '');
   const [intent, setIntent] = useState<'VERIFIED' | 'ACCEPTED_AS_IS' | 'PARTIAL'>('VERIFIED');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -87,7 +99,20 @@ export default function MergeNoteForm({ packetId, existingNote, currentStatus, i
       </div>
       
       <div className="space-y-4">
-        <p className="text-[10px] uppercase tracking-[0.2em] text-white/30 font-bold">Audit Trail Rationale</p>
+        <div className="flex justify-between items-center">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-white/30 font-bold">Audit Trail Rationale</p>
+          {suggestedNotes && !existingNote && (
+            <button 
+              onClick={() => {
+                const formatted = `What Changed: ${suggestedNotes.whatChanged}\nWhy AI: ${suggestedNotes.whyAI}\nVerification: ${suggestedNotes.verificationSteps.join(', ')}`;
+                setNote(formatted);
+              }}
+              className="text-[10px] font-black text-primary uppercase tracking-widest hover:text-white transition-colors flex items-center gap-2"
+            >
+              <span>✨ Use AI Suggestion</span>
+            </button>
+          )}
+        </div>
         <div className="relative">
           <textarea
             className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-white placeholder:text-white/20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-300 text-sm h-40 resize-none leading-relaxed"
