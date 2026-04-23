@@ -73,9 +73,10 @@ export function applyPolicy(packet, policy = DEFAULT_POLICY) {
   }
 
   // 3. High Risk Paths (Existing tags check)
-  const highRiskTags = (packet.tags || []).filter(t => t.category === 'deterministic' && t.label === 'Security Sensitive');
+  const highRiskCategories = ['auth', 'billing', 'secrets-config', 'database-schema'];
+  const highRiskTags = (packet.tags || []).filter(t => t.type === 'DETERMINISTIC' && highRiskCategories.includes(t.category));
   if (highRiskTags.length > 0 && lineRisks.some(r => r.score >= 70)) {
-     reasons.push(`PR touches high-risk paths with elevated line-level risk.`);
+     reasons.push(`PR touches high-risk paths (${highRiskTags.map(t => t.category).join(', ')}) with elevated line-level risk.`);
   }
 
   // 3. Architectural Integrity (Phase 4)
